@@ -24,12 +24,22 @@ const STORAGE_KEYS = {
 const Storage = {
     // Generic methods
     get(key) {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : [];
+        try {
+            const data = localStorage.getItem(key);
+            return data ? JSON.parse(data) : [];
+        } catch (error) {
+            console.error(`Error reading from storage (${key}):`, error);
+            return [];
+        }
     },
 
     save(key, data) {
-        localStorage.setItem(key, JSON.stringify(data));
+        try {
+            localStorage.setItem(key, JSON.stringify(data));
+        } catch (error) {
+            console.error(`Error saving to storage (${key}):`, error);
+            alert('Storage full or disabled! Data may not be saved.');
+        }
     },
 
     // Helper to resolve document path (Local Storage Base64 OR Automatic File Discovery)
