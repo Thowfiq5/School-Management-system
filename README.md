@@ -18,6 +18,12 @@ This is a School Management System built with HTML, CSS, and JavaScript.
     -   **Build Command**: None (it's a static site).
     -   **Output Directory**: None.
 
+## Data & Storage Note
+This application uses **Browser LocalStorage** for data persistence. 
+- **Demo Data**: When you first open the deployed site, it will automatically populate with demo students, teachers, and classes.
+- **Data Privacy**: Any data you add (new students, uploaded photos) is stored ONLY in your browser. It is not sent to any server and will not persist if you clear your cache or open the site on a different device.
+- **Uploads**: You do **not** need to upload any files separately to GitHub or Vercel. Everything needed for the site to run is included in the repository.
+
 ## Troubleshooting
 
 If the UI is not loading:
