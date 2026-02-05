@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduFlow - Secure Access</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.4);
+            --bg-accent: #f8fafc;
+            --white: #ffffff;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-500: #64748b;
+            --gray-800: #1e293b;
+        }
+
+
+        body {
+            margin: 0;
+            font-family: 'Outfit', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: url('assets/images/login-bg.png') no-repeat center center fixed;
+            background-size: cover;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(99, 102, 241, 0.4) 100%);
+            backdrop-filter: blur(4px);
+            z-index: 1;
+        }
+
+
+
+        .login-card {
+            position: relative;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            width: 100%;
+            max-width: 440px;
+            padding: 3rem;
+            border-radius: 32px;
+            box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.5);
+            transform: translateY(0);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .login-header h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--gray-800);
+            letter-spacing: -1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-header p {
+            color: var(--gray-500);
+            font-weight: 400;
+        }
+
+        /* Role Grid Styling */
+        .role-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 2.5rem;
+        }
+
+        .role-option {
+            background: white;
+            border: 2px solid var(--gray-100);
+            padding: 1rem;
+            border-radius: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .role-option i {
+            display: block;
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+            color: var(--gray-500);
+            transition: all 0.3s;
+        }
+
+        .role-option span {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--gray-500);
+        }
+
+        .role-option:hover {
+            border-color: var(--primary);
+            background: var(--gray-50);
+            transform: translateY(-4px);
+        }
+
+        .role-option.active {
+            border-color: var(--primary);
+            background: var(--gray-100);
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1);
+        }
+
+        .role-option.active i,
+        .role-option.active span {
+            color: var(--primary);
+        }
+
+        .role-option.active::after {
+            content: '\f058';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: white;
+            color: var(--primary);
+            border-radius: 50%;
+            font-size: 1.1rem;
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.8125rem;
+            font-weight: 700;
+            color: var(--gray-800);
+            margin-left: 4px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.8;
+        }
+
+        .input-box {
+            position: relative;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 1rem 1.25rem;
+            padding-left: 3rem;
+            border: 2px solid var(--gray-100);
+            border-radius: 16px;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.3s;
+            box-sizing: border-box;
+            background: white;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px var(--primary-glow);
+        }
+
+        .input-box i {
+            position: absolute;
+            left: 1.25rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-500);
+            transition: all 0.3s;
+        }
+
+        .form-control:focus+i {
+            color: var(--primary);
+        }
+
+        .input-box .toggle-password {
+            position: absolute;
+            right: 1.25rem;
+            left: auto;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-500);
+            cursor: pointer;
+            transition: all 0.3s;
+            z-index: 10;
+        }
+
+        .toggle-password:hover {
+            color: var(--primary);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 1.125rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 18px;
+            font-size: 1.1rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 1.5rem;
+            box-shadow: 0 10px 25px -5px var(--primary-glow);
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px -5px var(--primary-glow);
+            filter: brightness(1.1);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            background: #fff1f2;
+            color: #e11d48;
+            padding: 1rem;
+            border-radius: 16px;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            border-left: 4px solid #e11d48;
+            display: none;
+            font-weight: 500;
+        }
+
+        .demo-footer {
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        .demo-btn {
+            background: none;
+            border: 1px solid var(--gray-200);
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            color: var(--gray-500);
+            cursor: pointer;
+            transition: all 0.2s;
+            margin: 0 4px;
+        }
+
+        .demo-btn:hover {
+            background: var(--gray-100);
+            border-color: var(--gray-500);
+            color: var(--gray-800);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <h1 id="app-title" style="cursor: pointer; user-select: none;">EduFlow</h1>
+            <p>Select your role and sign in</p>
+        </div>
+
+        <div id="error-box" class="error-message"></div>
+
+        <form id="login-form">
+            <!-- Hidden input for role -->
+            <input type="hidden" id="role-select" required>
+
+            <div class="role-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="role-option" id="admin-role-card" onclick="selectRole('admin', this)"
+                    style="display: none;">
+                    <i class="fas fa-user-shield"></i>
+                    <span>Admin</span>
+                </div>
+                <div class="role-option" onclick="selectRole('teacher', this)">
+                    <i class="fas fa-user-tie"></i>
+                    <span>Teacher</span>
+                </div>
+                <div class="role-option" onclick="selectRole('student', this)">
+                    <i class="fas fa-user-graduate"></i>
+                    <span>Student</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Username</label>
+                <div class="input-box">
+                    <input type="text" id="username" class="form-control" placeholder="Identity UID" required>
+                    <i class="fas fa-id-card"></i>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Secret Key</label>
+                <div class="input-box">
+                    <input type="password" id="password" class="form-control" placeholder="••••••••" required>
+                    <i class="fas fa-key"></i>
+                    <i class="fas fa-eye toggle-password" id="toggle-password" onclick="togglePasswordVisibility()"></i>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-login" id="submit-btn" disabled>
+                Unlock Access
+            </button>
+        </form>
+
+        <div class="demo-footer">
+            <p style="font-size: 0.7rem; color: var(--gray-500); margin-bottom: 12px; opacity: 0.7;">QUICK DEMO LOAD</p>
+            <span id="admin-demo-btn" style="display: none;"><button class="demo-btn"
+                    onclick="fillDemo('admin')">Admin</button></span>
+            <button class="demo-btn" onclick="fillDemo('teacher')">Teacher</button>
+            <button class="demo-btn" onclick="fillDemo('student')">Student</button>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script>
+        const ADMIN_EMAIL = 'admin@eduflow.com';
+
+        // Admin reveal logic
+        let clickCount = 0;
+        let lastClickTime = 0;
+        document.getElementById('app-title').addEventListener('click', () => {
+            const currentTime = new Date().getTime();
+            if (currentTime - lastClickTime < 500) {
+                clickCount++;
+            } else {
+                clickCount = 1;
+            }
+            lastClickTime = currentTime;
+
+            if (clickCount === 3) {
+                document.getElementById('admin-role-card').style.display = 'block';
+                document.getElementById('admin-demo-btn').style.display = 'inline';
+                document.querySelector('.role-grid').style.gridTemplateColumns = 'repeat(3, 1fr)';
+                // Trigger a small animation
+                const card = document.querySelector('.login-card');
+                card.style.borderColor = 'var(--primary)';
+                setTimeout(() => card.style.borderColor = 'rgba(255, 255, 255, 0.5)', 500);
+            }
+        });
+
+        function togglePasswordVisibility() {
+            const passwordInput = document.getElementById('password');
+            const toggleIcon = document.getElementById('toggle-password');
+
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleIcon.classList.remove('fa-eye');
+                toggleIcon.classList.add('fa-eye-slash');
+            } else {
+                passwordInput.type = 'password';
+                toggleIcon.classList.remove('fa-eye-slash');
+                toggleIcon.classList.add('fa-eye');
+            }
+        }
+
+        function selectRole(role, element) {
+            document.querySelectorAll('.role-option').forEach(opt => opt.classList.remove('active'));
+            element.classList.add('active');
+            document.getElementById('role-select').value = role;
+            document.getElementById('submit-btn').disabled = false;
+        }
+
+        function fillDemo(role) {
+            const users = {
+                admin: { u: 'admin@eduflow.com', p: '123' },
+                teacher: { u: 'teacher', p: '123' },
+                student: { u: 'student', p: '123' }
+            };
+
+            const options = document.querySelectorAll('.role-option');
+            const targetIdx = role === 'admin' ? 0 : (role === 'teacher' ? 1 : 2);
+            selectRole(role, options[targetIdx]);
+
+            document.getElementById('username').value = users[role].u;
+            document.getElementById('password').value = users[role].p;
+        }
+
+        document.getElementById('login-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const originalText = btn.innerHTML;
+
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Authenticating...';
+            btn.disabled = true;
+
+            setTimeout(() => {
+                const user = document.getElementById('username').value;
+                const pass = document.getElementById('password').value;
+                const role = document.getElementById('role-select').value;
+                const errorBox = document.getElementById('error-box');
+
+                const result = Auth.login(user, pass, role);
+                if (result.success) {
+                    window.location.href = 'index.html';
+                } else {
+                    errorBox.textContent = result.message;
+                    errorBox.style.display = 'block';
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+
+                    const card = document.querySelector('.login-card');
+                    card.style.transform = 'translateX(10px)';
+                    setTimeout(() => card.style.transform = 'translateX(-10px)', 100);
+                    setTimeout(() => card.style.transform = 'translateX(0)', 200);
+                }
+            }, 1000);
+        });
+
+        if (Auth.isAuthenticated()) {
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+
+</html>
