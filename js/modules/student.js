@@ -278,8 +278,8 @@ const StudentModule = {
                     <div class="glass-panel" style="padding: 1.5rem; margin-bottom: 1.5rem;">
                         <h3>My Identity</h3>
                         <div style="text-align: center; margin-top: 1.5rem;">
-                            <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--gray-100); margin: 0 auto 1rem auto; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--primary); font-weight: 800;">
-                                ${student.name.charAt(0)}
+                            <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--gray-100); margin: 0 auto 1rem auto; display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 2rem; color: var(--primary); font-weight: 800;">
+                                ${student.photo ? `<img src="${student.photo}" style="width:100%; height:100%; object-fit:cover;">` : student.name.charAt(0)}
                             </div>
                             <h4 style="margin: 0;">${student.name}</h4>
                             <p style="font-size: 0.8125rem; color: var(--gray-500);">${student.admissionNo}</p>

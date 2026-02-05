@@ -843,9 +843,7 @@ const AdminModule = {
 
         if (file.size > 2 * 1024 * 1024) return alert('File size must be under 2MB');
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const base64 = e.target.result;
+        const processFile = (base64) => {
             const allDocs = Storage.get(STORAGE_KEYS.DOCUMENTS);
             let docIndex = allDocs.findIndex(d => d.studentId === studentId);
 
@@ -860,7 +858,16 @@ const AdminModule = {
             alert('Document uploaded successfully!');
             this.manageStudentDocuments(studentId); // Refresh modal
         };
-        reader.readAsDataURL(file);
+
+        if (file.type.startsWith('image/')) {
+            Storage.resizeImage(file, 800, 800, (resizedBase64) => {
+                processFile(resizedBase64);
+            });
+        } else {
+            const reader = new FileReader();
+            reader.onload = (e) => processFile(e.target.result);
+            reader.readAsDataURL(file);
+        }
     },
 
     // SUBJECT MANAGEMENT
