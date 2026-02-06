@@ -116,7 +116,7 @@ const TeacherModule = {
 
     confirmTeacherClassSelection() {
         const classId = document.getElementById('teacher-class-select').value;
-        if (!classId) return alert('Please select a class to proceed.');
+        if (!classId) return NotificationSystem.showToast('Input Error', 'Please select a class to proceed.', 'warning');
 
         sessionStorage.setItem('selectedTeacherClassId', classId);
 
@@ -149,7 +149,7 @@ const TeacherModule = {
                     <h2 style="margin: 0;">My Attendance</h2>
                     <p style="color: var(--gray-600); font-size: 0.875rem; margin-top: 0.5rem;">View your attendance records for ${selectedClass.name} ${selectedClass.section}</p>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: flex-end;">
+                <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: flex-end;">
                     <div class="form-group">
                         <label class="form-label">Month</label>
                         <select id="attn-month" class="form-control">
@@ -186,7 +186,7 @@ const TeacherModule = {
 
         const classes = Storage.get(STORAGE_KEYS.CLASSES);
         const selectedClass = classes.find(c => c.id === classId);
-        
+
         // Get all attendance records for this class and month/year
         const allAttendance = Storage.get(STORAGE_KEYS.ATTENDANCE).filter(a => {
             const d = new Date(a.date);
@@ -210,10 +210,10 @@ const TeacherModule = {
         const attendanceHtml = allAttendance.sort((a, b) => new Date(a.date) - new Date(b.date)).map(record => {
             const dateObj = new Date(record.date);
             const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-            
+
             // For now, mark as present for all records (teachers are present for all marked records)
             presentDays++;
-            
+
             return `
                 <tr style="border-bottom: 1px solid var(--gray-100);">
                     <td style="padding: 1rem;">${dateStr}</td>
@@ -243,6 +243,7 @@ const TeacherModule = {
             </div>
 
             <div class="glass-panel" style="padding: 0;">
+            <div class="table-responsive">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: var(--gray-50);">
                         <tr>
@@ -254,6 +255,7 @@ const TeacherModule = {
                         ${attendanceHtml}
                     </tbody>
                 </table>
+            </div>
             </div>
         `;
     },
@@ -278,7 +280,7 @@ const TeacherModule = {
         container.innerHTML = `
             <div class="glass-panel" style="padding: 1.5rem; margin-bottom: 2rem;">
                 <h3 style="margin-bottom: 1.5rem;">Enter Exam Marks</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; align-items: flex-end;">
+                <div class="responsive-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: flex-end;">
                     <div class="form-group">
                         <label class="form-label">Exam Type</label>
                         <select id="exam-type" class="form-control">
@@ -318,9 +320,9 @@ const TeacherModule = {
         const container = document.getElementById('marks-list-container');
 
         // Validation
-        if (!examType) return alert('Please select an exam type');
-        if (!classId) return alert('Please select a class');
-        if (!subject) return alert('Please select a subject');
+        if (!examType) return NotificationSystem.showToast('Input Error', 'Please select an exam type', 'warning');
+        if (!classId) return NotificationSystem.showToast('Input Error', 'Please select a class', 'warning');
+        if (!subject) return NotificationSystem.showToast('Input Error', 'Please select a subject', 'warning');
 
         const classes = Storage.get(STORAGE_KEYS.CLASSES);
         const targetClass = classes.find(c => c.id === classId);
@@ -333,6 +335,7 @@ const TeacherModule = {
 
         container.innerHTML = `
             <div class="glass-panel" style="padding: 0;">
+                <div class="table-responsive">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: var(--gray-50);">
                         <tr>
@@ -355,6 +358,7 @@ const TeacherModule = {
                         `).join('')}
                     </tbody>
                 </table>
+                </div>
                 <div style="padding: 1.5rem; text-align: right;">
                     <button class="btn btn-success" onclick="TeacherModule.saveMarks('${examType}', '${classId}', '${subject}')">
                         <i class="fas fa-save"></i> Save Marks
@@ -365,14 +369,421 @@ const TeacherModule = {
     },
 
     saveMarks(examType, classId, subject) {
-        const marksData = {};
-        document.querySelectorAll('input[type="number"]').forEach(input => {
-            const studentId = input.name.split('-')[1];
-            marksData[studentId] = input.value;
+        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
+        const marks = Storage.get(STORAGE_KEYS.MARKS);
+
+        // Find existing record or create new
+        let markRecord = marks.find(m => m.examId === examType && m.classId === classId && m.subjectId === subject);
+
+        if (!markRecord) {
+            markRecord = {
+                id: Date.now().toString(),
+                examId: examType,
+                classId: classId,
+                subjectId: subject,
+                data: {}
+            };
+            marks.push(markRecord);
+        }
+
+        students.forEach(s => {
+            const input = document.querySelector(`input[name="marks-${s.id}"]`); // Changed to querySelector by name
+            if (input) markRecord.data[s.id] = input.value;
         });
 
-        Storage.saveMarks(examType, classId, subject, marksData);
-        alert('Marks saved successfully!');
+        Storage.save(STORAGE_KEYS.MARKS, marks);
+        NotificationSystem.showToast('Success', 'Marks saved successfully', 'success');
+    },
+
+    manageMarksheets(container) {
+        const classId = sessionStorage.getItem('selectedTeacherClassId');
+        if (!classId) return container.innerHTML = '<p>Please select a class first.</p>';
+
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        const teacherClass = classes.find(c => c.id === classId);
+        const exams = Storage.get(STORAGE_KEYS.EXAM_TYPES);
+
+        container.innerHTML = `
+            <style>
+                @media print {
+                    body * { visibility: hidden; }
+                    #bulk-marksheet-results, #bulk-marksheet-results * { visibility: visible; }
+                    #bulk-marksheet-results { position: absolute; left: 0; top: 0; width: 100%; border: none; }
+                    .no-print { display: none !important; }
+                    .page-break { page-break-after: always; border: none !important; padding: 0 !important; margin: 0 !important; }
+                }
+                .marksheet-card { background: white; color: #1a1a1a; padding: 2.5rem; margin-bottom: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; }
+                .marks-table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
+                .marks-table th, .marks-table td { padding: 12px; border: 1px solid #e5e7eb; text-align: left; font-size: 0.875rem; }
+                .marks-table th { background: #f9fafb; font-weight: 700; color: #374151; }
+                .grade-badge { padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.75rem; border: 1px solid rgba(0,0,0,0.05); }
+                .grade-A { background: #dcfce7; color: #166534; }
+                .grade-B { background: #dbeafe; color: #1e40af; }
+                .grade-C { background: #fef9c3; color: #854d0e; }
+                .grade-D { background: #ffedd5; color: #9a3412; }
+                .grade-E { background: #fee2e2; color: #991b1b; }
+            </style>
+
+            <div class="glass-panel no-print" style="padding: 1.5rem; margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h3 style="margin: 0;">Bulk Marksheet: ${teacherClass.name} - ${teacherClass.section}</h3>
+                        <p style="margin: 5px 0 0 0; font-size: 0.8125rem; color: var(--gray-500);">Generate report cards for the entire class at once.</p>
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" style="font-size: 0.75rem;">Select Exam</label>
+                            <select id="bulk-ms-exam" class="form-control" style="min-width: 150px;">
+                                <option value="all">Annual Summary</option>
+                                ${exams.map(e => `<option value="${e.name}">${e.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" style="font-size: 0.75rem;">Page Size</label>
+                            <select id="bulk-ms-size" class="form-control" style="min-width: 100px;">
+                                <option value="A4">A4</option>
+                                <option value="A3">A3</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" style="font-size: 0.75rem;">File Type</label>
+                            <select id="bulk-ms-type" class="form-control" style="min-width: 100px;">
+                                <option value="pdf">PDF</option>
+                                <option value="word">Word</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label class="form-label" style="font-size: 0.75rem;">View Mode</label>
+                            <select id="bulk-ms-view" class="form-control" style="min-width: 120px;">
+                                <option value="cards">Cards</option>
+                                <option value="broadsheet">Single Sheet</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="TeacherModule.generateBulkMarksheets()">
+                            <i class="fas fa-magic"></i> Generate
+                        </button>
+                        <button class="btn" id="btn-ms-download" onclick="TeacherModule.downloadMarksheets()" style="background: var(--gray-800); color: white; display: none;">
+                            <i class="fas fa-download"></i> Save/Print
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="bulk-marksheet-results">
+                <div class="glass-panel" style="padding: 4rem; text-align: center; color: var(--gray-400); border: 2px dashed var(--gray-200);">
+                    <i class="fas fa-file-invoice fa-4x" style="margin-bottom: 1.5rem; opacity: 0.3;"></i>
+                    <h3>Ready to Generate</h3>
+                    <p>Select an exam type and click "Generate" to preview all student marksheets.</p>
+                </div>
+            </div>
+        `;
+    },
+
+    downloadMarksheets() {
+        const fileType = document.getElementById('bulk-ms-type').value;
+        const pageSize = document.getElementById('bulk-ms-size').value;
+        const results = document.getElementById('bulk-marksheet-results');
+
+        if (fileType === 'pdf') {
+            const style = document.createElement('style');
+            style.id = 'print-page-size-style-teacher';
+            style.innerHTML = `@page { size: ${pageSize}; margin: 10mm; }`;
+            document.head.appendChild(style);
+            window.print();
+            setTimeout(() => style.remove(), 1000);
+        } else if (fileType === 'word') {
+            const html = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head><meta charset='utf-8'><title>Marksheets</title>
+                <style>
+                    .marksheet-card { border: 1px solid #ccc; padding: 20px; margin-bottom: 30px; page-break-after: always; font-family: sans-serif; }
+                    .marks-table { width: 100%; border-collapse: collapse; }
+                    .marks-table th, .marks-table td { border: 1px solid #000; padding: 5px; }
+                </style>
+                </head>
+                <body>${results.innerHTML}</body>
+                </html>`;
+            const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Marksheets_${new Date().getTime()}.doc`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    },
+
+    generateBulkMarksheets() {
+        const classId = sessionStorage.getItem('selectedTeacherClassId');
+        const examType = document.getElementById('bulk-ms-exam').value;
+        const viewMode = document.getElementById('bulk-ms-view').value;
+        const resultsContainer = document.getElementById('bulk-marksheet-results');
+        const downloadBtn = document.getElementById('btn-ms-download');
+
+        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
+        const marks = Storage.get(STORAGE_KEYS.MARKS);
+        const allExamTypes = Storage.get(STORAGE_KEYS.EXAM_TYPES);
+
+        if (students.length === 0) {
+            resultsContainer.innerHTML = '<div class="glass-panel" style="padding: 2rem; text-align: center;">No students found in this class.</div>';
+            return;
+        }
+
+        const calculateGrade = (score, totalMarks = 100) => {
+            const percentage = (score / totalMarks) * 100;
+            if (percentage >= 91) return 'A1';
+            if (percentage >= 81) return 'A2';
+            if (percentage >= 71) return 'B1';
+            if (percentage >= 61) return 'B2';
+            if (percentage >= 51) return 'C1';
+            if (percentage >= 41) return 'C2';
+            if (percentage >= 33) return 'D';
+            return 'E';
+        };
+
+        const getExamTotal = (name) => {
+            const totalMarksMap = {
+                'Unit Test I': 20, 'Unit Test II': 20, 'Unit Test III': 20,
+                'Quarterly Exam': 100, 'Half Yearly Exam': 100, 'Annual Exam': 100
+            };
+            if (totalMarksMap[name]) return totalMarksMap[name];
+            if (name.toLowerCase().includes('unit')) return 20;
+            return 100;
+        };
+
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        const selectedClass = classes.find(c => c.id === classId);
+        const classSubjects = getSubjectsByGrade(selectedClass.name);
+        const allSubjects = Storage.get(STORAGE_KEYS.SUBJECTS);
+        const filteredSubjects = allSubjects.filter(s => classSubjects.includes(s.name));
+
+        let html = '';
+
+        if (viewMode === 'broadsheet') {
+            html = this.renderConsolidatedSheet(students, marks, examType, allExamTypes, getExamTotal, calculateGrade, filteredSubjects);
+        } else {
+            students.forEach((student, index) => {
+                const studentMarks = marks.filter(m => m.data && m.data[student.id]);
+
+                html += `
+                    <div class="marksheet-card ${index < students.length - 1 ? 'page-break' : ''}">
+                        <!-- School Header -->
+                        <div style="text-align: center; margin-bottom: 2rem; border-bottom: 3px double var(--primary); padding-bottom: 1.5rem;">
+                            <h1 style="margin: 0; color: var(--primary); font-size: 2.2rem; letter-spacing: -1px;">SCHOOL MANAGEMENT SYSTEM</h1>
+                            <p style="margin: 5px 0; font-size: 0.9rem; font-weight: 700; color: var(--gray-600); letter-spacing: 4px;">INTERNATIONAL SCHOOL</p>
+                            <div style="margin-top: 15px; display: inline-block; background: var(--gray-900); color: white; padding: 4px 15px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">SESSION 2025-26</div>
+                            <h2 style="margin-top: 15px; font-size: 1.25rem; font-weight: 800; text-decoration: none; background: #f3f4f6; display: inline-block; padding: 5px 20px; border-radius: 4px;">${examType === 'all' ? 'ANNUAL PROGRESS REPORT' : examType.toUpperCase() + ' REPORT CARD'}</h2>
+                        </div>
+
+                        <!-- Student Info -->
+                        <div style="display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 1rem; margin-bottom: 2rem; font-size: 0.9rem;">
+                            <div style="border-right: 1px solid #eee; padding-right: 1.5rem;">
+                                <strong style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; display: block; margin-bottom: 4px;">Student Name</strong>
+                                <span style="font-size: 1.1rem; font-weight: 800; color: #111827;">${student.name}</span>
+                            </div>
+                            <div style="border-right: 1px solid #eee; padding-right: 1.5rem; text-align: center;">
+                                <div style="display: flex; justify-content: center; gap: 2rem;">
+                                    <div>
+                                        <strong style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase;">Class</strong><br>
+                                        <span style="font-weight: 700;">${student.className}</span>
+                                    </div>
+                                    <div>
+                                        <strong style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase;">Section</strong><br>
+                                        <span style="font-weight: 700;">${student.section}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <strong style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; display: block; margin-bottom: 4px;">Admission No</strong>
+                                <span style="font-weight: 700; color: #111827;">${student.admissionNo}</span>
+                            </div>
+                        </div>
+
+                        <!-- Marks Table -->
+                        <div class="table-responsive">
+                            ${examType === 'all' ? this.renderBulkCumulativeTable(student, studentMarks, allExamTypes) : this.renderBulkDetailedTable(student, studentMarks, examType, getExamTotal, calculateGrade)}
+                        </div>
+
+                        <!-- Remarks -->
+                        <div style="margin-top: 2rem; background: #f9fafb; padding: 1.25rem; border-radius: 10px; border: 1px solid #f3f4f6;">
+                            <strong style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; display: block; margin-bottom: 8px;">Academic Remarks</strong>
+                            <p style="margin: 0; font-style: italic; color: #374151; font-size: 0.875rem; line-height: 1.5;">
+                                ${index % 3 === 0 ? "Outstanding performance! Keep up the excellent work and maintain this momentum." :
+                        index % 3 === 1 ? "Very good progress. Strategic focus on consistency will lead to even better results." :
+                            "Satisfactory progress. Encouraged to participate more actively in classroom discussions."}
+                            </p>
+                        </div>
+
+                        <!-- Signatures -->
+                        <div style="margin-top: 4rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3rem; text-align: center; font-size: 0.7rem; font-weight: 700; color: #4b5563;">
+                            <div><div style="border-bottom: 1px solid #9ca3af; margin-bottom: 10px; height: 30px;"></div>CLASS TEACHER</div>
+                            <div><div style="border-bottom: 1px solid #9ca3af; margin-bottom: 10px; height: 30px;"></div>PRINCIPAL</div>
+                            <div><div style="border-bottom: 1px solid #9ca3af; margin-bottom: 10px; height: 30px;"></div>PARENT/GUARDIAN</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        resultsContainer.innerHTML = html;
+        downloadBtn.style.display = 'block';
+        NotificationSystem.showToast('Success', `Generated ${viewMode === 'broadsheet' ? 'consolidated sheet' : students.length + ' marksheets'}.`, 'success');
+    },
+
+    renderConsolidatedSheet(students, marks, examType, allExamTypes, getExamTotal, calculateGrade, subjects) {
+        // const subjects = Storage.get(STORAGE_KEYS.SUBJECTS); // Now passed as argument
+        const examTotal = examType === 'all' ? 100 : getExamTotal(examType);
+
+        let html = `
+            <div class="marksheet-card" style="padding: 2.5rem;">
+                <div style="text-align: center; margin-bottom: 2rem;">
+                    <h1 style="margin: 0; color: var(--primary); font-size: 1.8rem;">CONSOLIDATED RESULT SHEET</h1>
+                    <p style="margin: 5px 0; font-weight: 700; color: var(--gray-600);">Class: ${students[0].className} - ${students[0].section} | Exam: ${examType === 'all' ? 'Annual Summary' : examType}</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="marks-table">
+                        <thead>
+                            <tr>
+                                <th>S.No</th>
+                                <th>Adm No</th>
+                                <th>Student Name</th>
+                                ${subjects.map(s => `<th style="text-align:center; font-size: 0.7rem;">${s.name}</th>`).join('')}
+                                <th style="text-align:center;">Total</th>
+                                <th style="text-align:center;">%</th>
+                                <th style="text-align:center;">Grade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        students.forEach((student, idx) => {
+            let studentTotal = 0;
+            let subjectCount = 0;
+            const studentMarks = marks.filter(m => m.data && m.data[student.id]);
+
+            const subScores = subjects.map(s => {
+                let score = 0;
+                if (examType === 'all') {
+                    const subjMarks = studentMarks.filter(m => m.subjectId === s.name);
+                    if (subjMarks.length > 0) {
+                        const sum = subjMarks.reduce((acc, m) => acc + (parseFloat(m.data[student.id]) || 0), 0);
+                        score = sum / subjMarks.length;
+                    }
+                } else {
+                    const mark = studentMarks.find(m => m.subjectId === s.name && m.examId === examType);
+                    score = mark ? parseFloat(mark.data[student.id]) || 0 : 0;
+                }
+                studentTotal += score;
+                subjectCount++;
+                return `<td style="text-align:center;">${score > 0 ? score.toFixed(1) : '-'}</td>`;
+            }).join('');
+
+            const maxTotal = subjectCount * examTotal;
+            const percentage = maxTotal > 0 ? (studentTotal / maxTotal) * 100 : 0;
+            const grade = calculateGrade(studentTotal, maxTotal);
+
+            html += `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td style="font-size: 0.8rem;">${student.admissionNo}</td>
+                    <td style="font-weight: 700;">${student.name}</td>
+                    ${subScores}
+                    <td style="text-align:center; font-weight: 800; color: var(--primary);">${studentTotal.toFixed(1)}</td>
+                    <td style="text-align:center; font-weight: 600;">${percentage.toFixed(1)}%</td>
+                    <td style="text-align:center;"><span class="grade-badge grade-${grade.charAt(0)}">${grade}</span></td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        return html;
+    },
+
+    renderBulkDetailedTable(student, studentMarks, examType, getExamTotal, calculateGrade) {
+        const examMarks = studentMarks.filter(m => m.examId === examType);
+        const totalMaxMarks = getExamTotal(examType);
+
+        let grandTotalObtained = 0;
+        let grandTotalPossible = 0;
+
+        const rows = examMarks.map(m => {
+            const score = parseFloat(m.data[student.id]) || 0;
+            const percentage = (score / totalMaxMarks) * 100;
+            const grade = calculateGrade(score, totalMaxMarks);
+            grandTotalObtained += score;
+            grandTotalPossible += totalMaxMarks;
+
+            return `
+                <tr>
+                    <td style="font-weight: 600;">${m.subjectId}</td>
+                    <td style="text-align: center; font-weight: 700; color: var(--primary);">${score}</td>
+                    <td style="text-align: center; color: #6b7280;">${totalMaxMarks}</td>
+                    <td style="text-align: center;">${percentage.toFixed(1)}%</td>
+                    <td style="text-align: center;"><span class="grade-badge grade-${grade.charAt(0)}">${grade}</span></td>
+                </tr>
+            `;
+        }).join('');
+
+        const overallPercentage = grandTotalPossible > 0 ? (grandTotalObtained / grandTotalPossible) * 100 : 0;
+        const overallGrade = calculateGrade(grandTotalObtained / (grandTotalPossible / 100));
+
+        return `
+            <table class="marks-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">SUBJECTS</th>
+                        <th style="text-align: center;">OBTAINED</th>
+                        <th style="text-align: center;">MAX MARKS</th>
+                        <th style="text-align: center;">PERCENT %</th>
+                        <th style="text-align: center;">GRADE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows || '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: #9ca3af;">No marks recorded for this student.</td></tr>'}
+                </tbody>
+                <tfoot>
+                    <tr style="background: #f3f4f6; font-weight: 800;">
+                        <td style="text-transform: uppercase; letter-spacing: 1px;">Aggregate Result</td>
+                        <td style="text-align: center; font-size: 1.1rem; color: var(--primary);">${grandTotalObtained.toFixed(1)}</td>
+                        <td style="text-align: center;">${grandTotalPossible}</td>
+                        <td style="text-align: center;">${overallPercentage.toFixed(1)}%</td>
+                        <td style="text-align: center;"><span class="grade-badge grade-${overallGrade.charAt(0)}" style="font-size: 0.9rem; padding: 4px 15px;">${overallGrade}</span></td>
+                    </tr>
+                </tfoot>
+            </table>
+        `;
+    },
+
+    renderBulkCumulativeTable(student, studentMarks, allExamTypes) {
+        const subjects = [...new Set(studentMarks.map(m => m.subjectId))];
+        const examNames = allExamTypes.map(e => e.name);
+
+        return `
+            <table class="marks-table">
+                <thead>
+                    <tr>
+                        <th style="width: 30%;">SUBJECT</th>
+                        ${examNames.map(name => `<th style="text-align:center; font-size: 0.65rem;">${name.toUpperCase()}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${subjects.map(sub => `
+                        <tr>
+                            <td style="font-weight: 700;">${sub}</td>
+                            ${examNames.map(exam => {
+            const mark = studentMarks.find(m => m.subjectId === sub && m.examId === exam);
+            return `<td style="text-align:center; font-weight: 600;">${mark ? mark.data[student.id] : '-'}</td>`;
+        }).join('')}
+                        </tr>
+                    `).join('') || `<tr><td colspan="${examNames.length + 1}" style="text-align:center;">No performance data found.</td></tr>`}
+                </tbody>
+            </table>
+        `;
     },
 
     manageHomework(container) {
@@ -393,8 +804,9 @@ const TeacherModule = {
                     <i class="fas fa-plus"></i> Post Homework
                 </button>
             </div>
-            <div id="hw-list" class="glass-panel" style="padding: 0;">
-                <table style="width: 100%; border-collapse: collapse;">
+            <div id="homework-list" class="glass-panel" style="padding: 0; margin-top: 1.5rem;">
+                <div class="table-responsive">
+                    <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: var(--gray-50);">
                         <tr>
                             <th style="padding: 1rem; text-align: left;">Class</th>
@@ -405,16 +817,16 @@ const TeacherModule = {
                     </thead>
                     <tbody id="hw-table-body">
                         ${homework.reverse().map(hw => {
-                            // Calculate submission stats
-                            const submissions = Storage.get(STORAGE_KEYS.SUBMISSIONS).filter(s => s.homeworkId === hw.id);
-                            const totalStudents = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => 
-                                Storage.get(STORAGE_KEYS.CLASSES).find(c => c.id === hw.classId)?.name === s.className
-                            ).length || 20;
-                            const submittedCount = submissions.length;
-                            const gradedCount = submissions.filter(s => s.status === 'Graded').length;
-                            const pendingCount = submittedCount - gradedCount;
-                            
-                            return `
+            // Calculate submission stats
+            const submissions = Storage.get(STORAGE_KEYS.SUBMISSIONS).filter(s => s.homeworkId === hw.id);
+            const totalStudents = Storage.get(STORAGE_KEYS.STUDENTS).filter(s =>
+                Storage.get(STORAGE_KEYS.CLASSES).find(c => c.id === hw.classId)?.name === s.className
+            ).length || 20;
+            const submittedCount = submissions.length;
+            const gradedCount = submissions.filter(s => s.status === 'Graded').length;
+            const pendingCount = submittedCount - gradedCount;
+
+            return `
                             <tr style="border-bottom: 1px solid var(--gray-100);">
                                 <td style="padding: 1rem;">${hw.className}</td>
                                 <td style="padding: 1rem;">${hw.subject}</td>
@@ -432,7 +844,7 @@ const TeacherModule = {
                                 </td>
                             </tr>
                         `;
-                        }).join('') || '<tr><td colspan="4" style="padding: 2rem; text-align: center; color: var(--gray-400);">No homework posted yet.</td></tr>'}
+        }).join('') || '<tr><td colspan="4" style="padding: 2rem; text-align: center; color: var(--gray-400);">No homework posted yet.</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -519,7 +931,7 @@ const TeacherModule = {
         const totalSubmissions = submissions.length;
         const totalPossibleSubmissions = homework.length * students.length;
         const completionRate = totalPossibleSubmissions > 0 ? Math.round((totalSubmissions / totalPossibleSubmissions) * 100) : 0;
-        const averageScore = submissions.filter(s => s.score).length > 0 
+        const averageScore = submissions.filter(s => s.score).length > 0
             ? Math.round(submissions.filter(s => s.score).reduce((sum, s) => sum + parseInt(s.score), 0) / submissions.filter(s => s.score).length)
             : 0;
 
@@ -558,19 +970,19 @@ const TeacherModule = {
             <h3 style="margin-top: 2rem; margin-bottom: 1rem;">📚 All Homework Status</h3>
             <div style="display: grid; gap: 1.5rem;">
                 ${homework.length > 0 ? homework.map(hw => {
-                    const hwSubmissions = submissions.filter(s => s.homeworkId === hw.id);
-                    const submittedCount = hwSubmissions.length;
-                    const notSubmittedCount = students.length - submittedCount;
-                    const gradedCount = hwSubmissions.filter(s => s.status === 'Graded').length;
-                    const pendingCount = submittedCount - gradedCount;
-                    const avgScore = hwSubmissions.filter(s => s.score).length > 0
-                        ? Math.round(hwSubmissions.filter(s => s.score).reduce((sum, s) => sum + parseInt(s.score), 0) / hwSubmissions.filter(s => s.score).length)
-                        : 0;
-                    const submissionRate = Math.round((submittedCount / students.length) * 100);
-                    const passCount = hwSubmissions.filter(s => s.score && parseInt(s.score) >= 40).length;
-                    const failCount = hwSubmissions.filter(s => s.score && parseInt(s.score) < 40).length;
+            const hwSubmissions = submissions.filter(s => s.homeworkId === hw.id);
+            const submittedCount = hwSubmissions.length;
+            const notSubmittedCount = students.length - submittedCount;
+            const gradedCount = hwSubmissions.filter(s => s.status === 'Graded').length;
+            const pendingCount = submittedCount - gradedCount;
+            const avgScore = hwSubmissions.filter(s => s.score).length > 0
+                ? Math.round(hwSubmissions.filter(s => s.score).reduce((sum, s) => sum + parseInt(s.score), 0) / hwSubmissions.filter(s => s.score).length)
+                : 0;
+            const submissionRate = Math.round((submittedCount / students.length) * 100);
+            const passCount = hwSubmissions.filter(s => s.score && parseInt(s.score) >= 40).length;
+            const failCount = hwSubmissions.filter(s => s.score && parseInt(s.score) < 40).length;
 
-                    return `
+            return `
                         <div class="glass-card" style="padding: 1.5rem; border-left: 4px solid #3b82f6;">
                             <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; margin-bottom: 1.5rem; align-items: start;">
                                 <div>
@@ -631,7 +1043,7 @@ const TeacherModule = {
                             </div>
                         </div>
                     `;
-                }).join('') : '<div style="text-align: center; padding: 3rem; color: var(--gray-400);"><i class="fas fa-inbox fa-3x"></i><p>No homework posted yet.</p></div>'}
+        }).join('') : '<div style="text-align: center; padding: 3rem; color: var(--gray-400);"><i class="fas fa-inbox fa-3x"></i><p>No homework posted yet.</p></div>'}
             </div>
         `;
 
@@ -765,12 +1177,12 @@ const TeacherModule = {
         contentArea.innerHTML = `
             <div style="display: grid; gap: 1rem;">
                 ${fileredSubmissions.map(s => {
-                    const student = students.find(st => st.id === s.studentId) || { name: 'Unknown', admissionNo: 'N/A' };
-                    const isGraded = s.status === 'Graded';
-                    const isPassed = isGraded && s.score >= 40;
-                    const isFailed = isGraded && s.score < 40;
+            const student = students.find(st => st.id === s.studentId) || { name: 'Unknown', admissionNo: 'N/A' };
+            const isGraded = s.status === 'Graded';
+            const isPassed = isGraded && s.score >= 40;
+            const isFailed = isGraded && s.score < 40;
 
-                    return `
+            return `
                         <div class="glass-card" style="padding: 1.25rem; border-left: 4px solid ${isGraded ? (isPassed ? '#10b981' : '#ef4444') : '#f59e0b'};">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
                                 <div>
@@ -793,7 +1205,7 @@ const TeacherModule = {
                                     <div>
                                         <div style="font-size: 0.65rem; text-transform: uppercase; color: ${isPassed ? '#15803d' : '#991b1b'}; font-weight: 700;">Teacher Feedback</div>
                                         <div style="font-size: 0.875rem; color: ${isPassed ? '#166534' : '#7f1d1d'}; margin-top: 0.25rem; line-height: 1.4;">${s.remarks || '—'}</div>
-                                        <div style="font-size: 0.7rem; color: ${isPassed ? '#15803d' : '#991b1b'}; margin-top: 0.5rem;">Graded on ${new Date(s.gradedAt).toLocaleString('en-IN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>
+                                        <div style="font-size: 0.7rem; color: ${isPassed ? '#15803d' : '#991b1b'}; margin-top: 0.5rem;">Graded on ${new Date(s.gradedAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
                                     </div>
                                 </div>
                             ` : ''}
@@ -801,11 +1213,11 @@ const TeacherModule = {
                             <div style="padding: 0.75rem; background: #f9fafb; border-radius: 8px; margin-top: 1rem; font-size: 0.85rem; border: 1px solid var(--gray-200);">
                                 <strong style="color: #374151;">Submission:</strong>
                                 <p style="margin: 0.5rem 0 0 0; white-space: pre-wrap; line-height: 1.5; color: #6b7280;">${s.content}</p>
-                                <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #9ca3af;">Submitted: ${new Date(s.submittedAt).toLocaleString('en-IN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>
+                                <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #9ca3af;">Submitted: ${new Date(s.submittedAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
                             </div>
                         </div>
                     `;
-                }).join('')}
+        }).join('')}
             </div>
         `;
     },
@@ -866,14 +1278,14 @@ const TeacherModule = {
             <!-- Submissions List -->
             <div id="submissions-container" style="max-height: 600px; overflow-y: auto; padding-right: 10px;">
                 ${submissions.map(s => {
-                    const student = students.find(st => st.id === s.studentId) || { name: 'Unknown', admissionNo: 'N/A' };
-                    const isGraded = s.status === 'Graded';
-                    return `
+            const student = students.find(st => st.id === s.studentId) || { name: 'Unknown', admissionNo: 'N/A' };
+            const isGraded = s.status === 'Graded';
+            return `
                         <div class="glass-card submission-card" data-status="${isGraded ? 'graded' : 'pending'}" style="padding: 1.25rem; margin-bottom: 1.5rem; border-left: 4px solid ${isGraded ? '#10b981' : '#f59e0b'}; transition: all 0.2s;">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
                                 <div>
                                     <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600;">${student.name}</h4>
-                                    <span style="font-size: 0.7rem; color: var(--gray-400);">Admission: ${student.admissionNo} | Submitted: ${new Date(s.submittedAt).toLocaleString('en-IN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</span>
+                                    <span style="font-size: 0.7rem; color: var(--gray-400);">Admission: ${student.admissionNo} | Submitted: ${new Date(s.submittedAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                 </div>
                                 <span class="badge" style="background: ${isGraded ? '#dcfce7' : '#fef3c7'}; color: ${isGraded ? '#15803d' : '#92400e'}; padding: 0.4rem 0.8rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
                                     ${isGraded ? '✓ Graded' : '⏳ Pending'}
@@ -894,7 +1306,7 @@ const TeacherModule = {
                                     <div>
                                         <div style="font-size: 0.65rem; text-transform: uppercase; color: #15803d; font-weight: 700;">Teacher's Feedback</div>
                                         <div style="font-size: 0.875rem; color: #166534; margin-top: 0.25rem;">${s.remarks || '—'}</div>
-                                        <div style="font-size: 0.7rem; color: #15803d; margin-top: 0.5rem;">Graded on ${new Date(s.gradedAt).toLocaleString('en-IN', {month: 'short', day: 'numeric'})}</div>
+                                        <div style="font-size: 0.7rem; color: #15803d; margin-top: 0.5rem;">Graded on ${new Date(s.gradedAt).toLocaleString('en-IN', { month: 'short', day: 'numeric' })}</div>
                                     </div>
                                 </div>
                             ` : `
@@ -916,7 +1328,7 @@ const TeacherModule = {
                             `}
                         </div>
                     `;
-                }).join('') || '<div style="text-align: center; padding: 3rem;"><i class="fas fa-inbox fa-3x" style="color: var(--gray-200); margin-bottom: 1rem;"></i><p style="color: var(--gray-400);">No submissions for this assignment yet.</p></div>'}
+        }).join('') || '<div style="text-align: center; padding: 3rem;"><i class="fas fa-inbox fa-3x" style="color: var(--gray-200); margin-bottom: 1rem;"></i><p style="color: var(--gray-400);">No submissions for this assignment yet.</p></div>'}
             </div>
         `;
 
@@ -936,12 +1348,12 @@ const TeacherModule = {
 
     filterSubmissions(filterType, hwId, subject, totalStudents) {
         const submissions = Storage.get(STORAGE_KEYS.SUBMISSIONS).filter(s => s.homeworkId === hwId);
-        
+
         // Update active button
         document.querySelectorAll('.notif-filter-btn').forEach(btn => {
             btn.style.background = btn.dataset.filter === filterType ? (
-                filterType === 'pending' ? '#fffbeb' : 
-                filterType === 'graded' ? '#f0fdf4' : 'white'
+                filterType === 'pending' ? '#fffbeb' :
+                    filterType === 'graded' ? '#f0fdf4' : 'white'
             ) : 'white';
         });
 
@@ -962,7 +1374,7 @@ const TeacherModule = {
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
                         <div>
                             <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600;">${student.name}</h4>
-                            <span style="font-size: 0.7rem; color: var(--gray-400);">Admission: ${student.admissionNo} | Submitted: ${new Date(s.submittedAt).toLocaleString('en-IN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</span>
+                            <span style="font-size: 0.7rem; color: var(--gray-400);">Admission: ${student.admissionNo} | Submitted: ${new Date(s.submittedAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                         <span class="badge" style="background: ${isGraded ? '#dcfce7' : '#fef3c7'}; color: ${isGraded ? '#15803d' : '#92400e'}; padding: 0.4rem 0.8rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
                             ${isGraded ? '✓ Graded' : '⏳ Pending'}
@@ -983,7 +1395,7 @@ const TeacherModule = {
                             <div>
                                 <div style="font-size: 0.65rem; text-transform: uppercase; color: #15803d; font-weight: 700;">Teacher's Feedback</div>
                                 <div style="font-size: 0.875rem; color: #166534; margin-top: 0.25rem;">${s.remarks || '—'}</div>
-                                <div style="font-size: 0.7rem; color: #15803d; margin-top: 0.5rem;">Graded on ${new Date(s.gradedAt).toLocaleString('en-IN', {month: 'short', day: 'numeric'})}</div>
+                                <div style="font-size: 0.7rem; color: #15803d; margin-top: 0.5rem;">Graded on ${new Date(s.gradedAt).toLocaleString('en-IN', { month: 'short', day: 'numeric' })}</div>
                             </div>
                         </div>
                     ` : `
@@ -1024,7 +1436,7 @@ const TeacherModule = {
 
         // Validate score
         if (!score || isNaN(score) || score < 0 || score > 100) {
-            return alert('Please enter a valid score (0-100).');
+            return NotificationSystem.showToast('Input Error', 'Please enter a valid score (0-100).', 'warning');
         }
 
         const submissions = Storage.get(STORAGE_KEYS.SUBMISSIONS);
@@ -1043,7 +1455,7 @@ const TeacherModule = {
             // Find student info for notification
             const submission = submissions[subIndex];
             const student = Storage.get(STORAGE_KEYS.STUDENTS).find(s => s.id === submission.studentId);
-            
+
             // Create notification for student
             if (window.NotificationSystem && student) {
                 NotificationSystem.createNotification({
@@ -1089,6 +1501,7 @@ const TeacherModule = {
                 </button>
             </div>
             <div id="notices-list" class="glass-panel" style="padding: 0;">
+            <div class="table-responsive">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: var(--gray-50);">
                         <tr>
@@ -1167,13 +1580,13 @@ const TeacherModule = {
             : classes;
 
         const currentClassId = sessionStorage.getItem('selectedTeacherClassId');
-        
+
         // Get attendance data for current month
         const now = new Date();
         const currentMonth = now.getMonth() + 1;
         const currentYear = now.getFullYear();
         const attendance = Storage.get(STORAGE_KEYS.ATTENDANCE) || [];
-        
+
         // Calculate attendance summary - teacher is present for all marked attendance records
         // Count unique dates where attendance was marked for any class
         const uniqueDates = new Set();
@@ -1251,7 +1664,7 @@ const TeacherModule = {
                 </div>
 
                 <div style="display: grid; gap: 1rem;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                         <div style="padding: 1rem; background: var(--gray-50); border-radius: var(--radius-md);">
                             <label style="font-size: 0.75rem; color: var(--gray-500); display: block;">Employee ID</label>
                             <strong style="color: var(--gray-800);">${teacherData.employeeId || 'N/A'}</strong>
@@ -1272,7 +1685,7 @@ const TeacherModule = {
                 </div>
 
                 <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-100); text-align: center;">
-                    <button class="btn glass-card" style="font-size: 0.8125rem;" onclick="alert('Profile editing is restricted in demo mode.')">
+                    <button class="btn glass-card" style="font-size: 0.8125rem;" onclick="NotificationSystem.showToast('Demo Mode', 'Profile editing is restricted in demo mode.', 'info')">
                         <i class="fas fa-edit"></i> Request Information Update
                     </button>
                 </div>
@@ -1282,7 +1695,7 @@ const TeacherModule = {
 
     confirmProfileClassSelection() {
         const classId = document.getElementById('profile-class-select').value;
-        if (!classId) return alert('Please select a class to proceed to the dashboard.');
+        if (!classId) return NotificationSystem.showToast('Input Error', 'Please select a class to proceed to the dashboard.', 'warning');
 
         sessionStorage.setItem('selectedTeacherClassId', classId);
         // Refresh sidebar to show all menu items
@@ -1313,6 +1726,7 @@ const TeacherModule = {
                 <div style="padding: 1.5rem; border-bottom: 1px solid var(--gray-100);">
                     <h3 style="margin: 0;">Class List: ${targetClass.name} - ${targetClass.section}</h3>
                 </div>
+            <div class="table-responsive">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: var(--gray-50);">
                         <tr>
@@ -1392,14 +1806,14 @@ const TeacherModule = {
             AdminModule.showModal(`Documents: ${student.name}`, content, () => AdminModule.closeModal());
             document.getElementById('modal-save-btn').style.display = 'none';
         } else {
-            alert("Modal system not initialized. Please refresh.");
+            NotificationSystem.showToast('System Error', "Modal system not initialized. Please refresh.", 'error');
         }
     },
 
     handleTeacherDocUpload(input, docType, studentId) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
-        if (file.size > 2 * 1024 * 1024) return alert('File size must be under 2MB');
+        if (file.size > 2 * 1024 * 1024) return NotificationSystem.showToast('Error', 'File size must be under 2MB', 'error');
 
         const processFile = (base64) => {
             const allDocs = Storage.get(STORAGE_KEYS.DOCUMENTS);
@@ -1413,7 +1827,7 @@ const TeacherModule = {
             }
 
             Storage.save(STORAGE_KEYS.DOCUMENTS, allDocs);
-            alert('Document uploaded successfully!');
+            NotificationSystem.showToast('Success', 'Document uploaded successfully!', 'success');
             this.manageStudentDocuments(studentId);
         };
 
@@ -1440,6 +1854,7 @@ const TeacherModule = {
                 </button>
             </div>
             <div id="students-list" class="glass-panel" style="padding: 0;">
+            <div class="table-responsive">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: var(--gray-50);">
                         <tr>
@@ -1499,7 +1914,7 @@ const TeacherModule = {
         const activeClass = classes.find(c => c.id === classId);
 
         const content = `
-            <div id="student-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div id="student-form" class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                 <div class="form-group" style="grid-column: span 2; text-align: center;">
                     <div id="photo-preview" style="width: 100px; height: 100px; border-radius: 50%; background: #f0f0f0; margin: 0 auto 10px; overflow: hidden; border: 2px solid var(--primary);">
                         ${s.photo ? `<img src="${s.photo}" style="width:100%; height:100%; object-fit:cover;">` : `<i class="fas fa-camera fa-2x" style="margin-top: 30px; color: #ccc;"></i>`}
