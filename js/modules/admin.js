@@ -42,6 +42,7 @@ const AdminModule = {
         const classes = Storage.get(STORAGE_KEYS.CLASSES);
         const attendance = Storage.get(STORAGE_KEYS.ATTENDANCE);
         const subjects = Storage.get(STORAGE_KEYS.SUBJECTS);
+        const fees = Storage.get(STORAGE_KEYS.FEES);
 
         // Calculate statistics
         const maleCount = students.filter(s => s.gender === 'Male').length;
@@ -110,7 +111,7 @@ const AdminModule = {
 
 
             <!-- Gender Distribution -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+            <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
                 <!-- Male Students Card -->
                 <div class="glass-card" style="padding: 2rem; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: white; position: relative; overflow: hidden;">
                     <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 50%;"></div>
@@ -147,8 +148,8 @@ const AdminModule = {
             </div>
 
 
-            <!-- Bottom Section -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem;">
+            <!-- Statistics List -->
+            <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem;">
                 <!-- Recent Admissions -->
                 <div class="glass-panel" style="padding: 1.5rem;">
                     <h3>Recent Admissions</h3>
@@ -206,14 +207,161 @@ const AdminModule = {
                     </div>
                 </div>
             </div>
+
+            <!-- Dashboard Analytics -->
+            <div class="glass-panel" style="margin-top: 2rem; padding: 1.5rem;">
+                <h3>System Analytics</h3>
+                <div class="responsive-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-top: 1.5rem;">
+                    <div style="background: white; padding: 1rem; border-radius: 8px; border: 1px solid var(--gray-200);">
+                        <h4 style="font-size: 0.875rem; color: var(--gray-600); margin-bottom: 1rem; text-align: center;">Gender Distribution</h4>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="chart-gender"></canvas>
+                        </div>
+                    </div>
+                    <div style="background: white; padding: 1rem; border-radius: 8px; border: 1px solid var(--gray-200);">
+                        <h4 style="font-size: 0.875rem; color: var(--gray-600); margin-bottom: 1rem; text-align: center;">Attendance Overview (Today)</h4>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="chart-attendance"></canvas>
+                        </div>
+                    </div>
+                    <div style="background: white; padding: 1rem; border-radius: 8px; border: 1px solid var(--gray-200);">
+                        <h4 style="font-size: 0.875rem; color: var(--gray-600); margin-bottom: 1rem; text-align: center;">Fee Collection Status</h4>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="chart-fees"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
         `;
+
+        // Render charts after a short delay to ensure DOM is ready
+        setTimeout(() => this.renderDashboardCharts(students, fees, attendance), 100);
+    },
+
+    renderDashboardCharts(students, fees, attendance) {
+        // Gender Distribution
+        const maleCount = students.filter(s => s.gender === 'Male').length;
+        const femaleCount = students.filter(s => s.gender === 'Female').length;
+
+        new Chart(document.getElementById('chart-gender'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Male', 'Female'],
+                datasets: [{
+                    data: [maleCount, femaleCount],
+                    backgroundColor: ['#3b82f6', '#ec4899'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+
+        // Attendance (Mock data logic if no today's attendance)
+        const totalActive = students.length;
+        // In a real scenario, filter attendance for today. Here we simulate or use last known.
+        // Let's check if there is any attendance for today
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayAttendance = attendance.filter(a => a.date === todayStr);
+        let present = 0, absent = 0;
+
+        if (todayAttendance.length > 0) {
+            present = todayAttendance.filter(a => a.status === 'Present').length;
+            absent = todayAttendance.filter(a => a.status === 'Absent').length;
+        } else {
+            // If no data for today, show a placeholder or "No Data" state?
+            // Or just show total vs 0 to prompt taking attendance
+            present = 0;
+            absent = 0;
+        }
+
+        // If absolutely no attendance, maybe show a "Not Taken" slice
+        const notTaken = totalActive - (present + absent);
+
+        new Chart(document.getElementById('chart-attendance'), {
+            type: 'pie',
+            data: {
+                labels: ['Present', 'Absent', 'Pending'],
+                datasets: [{
+                    data: [present, absent, notTaken],
+                    backgroundColor: ['#10b981', '#ef4444', '#e5e7eb'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+
+        // Fee Collection
+        const paidStudents = students.filter(s => {
+            const studentFees = fees.filter(f => f.studentId === s.id);
+            if (studentFees.length === 0) return false;
+            // Simplified: check if last fee record is 'paid'
+            // Better: Check balance. But for chart, let's categorize by status of total fee.
+            // Actually, let's just use the fees array directly if possible.
+            // Let's filter students by "fully paid", "partial", "unpaid"
+            // We need to calculate total fee vs paid for each student.
+            return false;
+        });
+
+        let fullyPaid = 0, partial = 0, unpaid = 0;
+
+        students.forEach(s => {
+            // Calculate totals similar to manageFees
+            // This logic needs to match manageFees
+            // For now, let's use a simpler metric from student objects if available, or re-calc.
+            const sFees = fees.filter(f => f.studentId === s.id);
+            const paid = sFees.reduce((sum, f) => sum + parseFloat(f.amount), 0);
+            // We need total fee for the student's class
+            const classes = Storage.get(STORAGE_KEYS.CLASSES);
+            const sClass = classes.find(c => c.id === s.classId);
+            const totalFee = sClass ? parseFloat(sClass.tuitionFee) : 0; // Assuming simple fee structure for now or 25000 default
+
+            if (paid >= totalFee && totalFee > 0) fullyPaid++;
+            else if (paid > 0) partial++;
+            else unpaid++;
+        });
+
+        new Chart(document.getElementById('chart-fees'), {
+            type: 'bar',
+            data: {
+                labels: ['Paid', 'Partial', 'Unpaid'],
+                datasets: [{
+                    label: 'Students',
+                    data: [fullyPaid, partial, unpaid],
+                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
     },
 
     resetSystem() {
         if (confirm('Are you sure? This will wipe all current data and restore the system to its initial demo state.')) {
             localStorage.clear();
             sessionStorage.clear();
-            alert('System has been reset. The page will now reload to initialize fresh demo data.');
+            NotificationSystem.showToast('System Reset', 'System has been reset. The page will now reload.', 'success');
+            setTimeout(() => window.location.reload(), 2000);
             window.location.reload();
         }
     },
@@ -227,7 +375,7 @@ const AdminModule = {
         container.innerHTML = `
             <div class="glass-panel" style="padding: 1.5rem; margin-bottom: 2rem;">
                 <h3 style="margin-bottom: 1.5rem;">Exam Marks Management</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; align-items: flex-end;">
+                <div class="responsive-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: flex-end;">
                     <div class="form-group">
                         <label class="form-label">Exam Type</label>
                         <select id="admin-exam-type" class="form-control">
@@ -260,6 +408,386 @@ const AdminModule = {
         `;
     },
 
+    manageMarksheets(container) {
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        const exams = Storage.get(STORAGE_KEYS.EXAM_TYPES);
+
+        container.innerHTML = `
+            <style>
+                @media print {
+                    body * { visibility: hidden; }
+                    #bulk-marksheet-results, #bulk-marksheet-results * { visibility: visible; }
+                    #bulk-marksheet-results { position: absolute; left: 0; top: 0; width: 100%; }
+                    .no-print { display: none !important; }
+                    .page-break { page-break-after: always; border: none !important; padding: 0 !important; margin: 0 !important; }
+                }
+                .marksheet-card { background: white; color: #1a1a1a; padding: 2rem; margin-bottom: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+                .marks-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+                .marks-table th, .marks-table td { padding: 10px; border: 1px solid #e5e7eb; text-align: left; font-size: 0.875rem; }
+                .marks-table th { background: #f9fafb; font-weight: 600; }
+                .grade-badge { padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; }
+                .grade-A { background: #dcfce7; color: #166534; }
+                .grade-B { background: #dbeafe; color: #1e40af; }
+                .grade-C { background: #fef9c3; color: #854d0e; }
+                .grade-D { background: #ffedd5; color: #9a3412; }
+                .grade-E { background: #fee2e2; color: #991b1b; }
+            </style>
+
+            <div class="glass-panel no-print" style="padding: 1.5rem; margin-bottom: 2rem;">
+                <h3 style="margin-bottom: 1.5rem;">Bulk Marksheet Generation</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: flex-end;">
+                    <div class="form-group">
+                        <label class="form-label">Select Class</label>
+                        <select id="bulk-ms-class" class="form-control">
+                            <option value="">-- Choose Class --</option>
+                            ${classes.map(c => `<option value="${c.id}">${c.name} - ${c.section}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Select Exam</label>
+                        <select id="bulk-ms-exam" class="form-control">
+                            <option value="all">Annual Summary (Cumulative)</option>
+                            ${exams.map(e => `<option value="${e.name}">${e.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Page Size</label>
+                        <select id="bulk-ms-size" class="form-control">
+                            <option value="A4">A4 (Standard)</option>
+                            <option value="A3">A3 (Large)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">File Type</label>
+                        <select id="bulk-ms-type" class="form-control">
+                            <option value="pdf">PDF Document</option>
+                            <option value="word">Word Document (.doc)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">View Mode</label>
+                        <select id="bulk-ms-view" class="form-control">
+                            <option value="cards">Individual Cards</option>
+                            <option value="broadsheet">Consolidated Sheet</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px; grid-column: span 2;">
+                        <button class="btn btn-primary" onclick="AdminModule.generateBulkMarksheets()" style="flex: 1;">
+                            <i class="fas fa-magic"></i> Generate & Preview
+                        </button>
+                        <button class="btn" id="btn-ms-download" onclick="AdminModule.downloadMarksheets()" style="background: var(--gray-800); color: white; flex: 1; display: none;">
+                            <i class="fas fa-download"></i> Download / Print
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="bulk-marksheet-results">
+                <div class="glass-panel" style="padding: 3rem; text-align: center; color: var(--gray-400);">
+                    <i class="fas fa-file-invoice fa-3x" style="margin-bottom: 1rem; opacity: 0.5;"></i>
+                    <p>Select a class and exam to generate marksheets for all students.</p>
+                </div>
+            </div>
+        `;
+    },
+
+    downloadMarksheets() {
+        const fileType = document.getElementById('bulk-ms-type').value;
+        const pageSize = document.getElementById('bulk-ms-size').value;
+        const results = document.getElementById('bulk-marksheet-results');
+
+        if (fileType === 'pdf') {
+            // Apply scale/size before printing
+            const style = document.createElement('style');
+            style.id = 'print-page-size-style';
+            style.innerHTML = `@page { size: ${pageSize}; margin: 10mm; }`;
+            document.head.appendChild(style);
+
+            window.print();
+
+            // Cleanup
+            setTimeout(() => style.remove(), 1000);
+        } else if (fileType === 'word') {
+            const html = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head><meta charset='utf-8'><title>Marksheets</title>
+                <style>
+                    .marksheet-card { border: 1px solid #ccc; padding: 20px; margin-bottom: 30px; page-break-after: always; font-family: sans-serif; }
+                    .marks-table { width: 100%; border-collapse: collapse; }
+                    .marks-table th, .marks-table td { border: 1px solid #000; padding: 5px; }
+                </style>
+                </head>
+                <body>${results.innerHTML}</body>
+                </html>`;
+
+            const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Marksheets_${new Date().getTime()}.doc`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    },
+
+    generateBulkMarksheets() {
+        const classId = document.getElementById('bulk-ms-class').value;
+        const examType = document.getElementById('bulk-ms-exam').value;
+        const pageSize = document.getElementById('bulk-ms-size').value;
+        const viewMode = document.getElementById('bulk-ms-view').value;
+        const resultsContainer = document.getElementById('bulk-marksheet-results');
+        const downloadBtn = document.getElementById('btn-ms-download');
+
+        if (!classId) {
+            return NotificationSystem.showToast('Required', 'Please select a class.', 'warning');
+        }
+
+        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
+        const marks = Storage.get(STORAGE_KEYS.MARKS);
+        const allExamTypes = Storage.get(STORAGE_KEYS.EXAM_TYPES);
+
+        if (students.length === 0) {
+            resultsContainer.innerHTML = '<div class="glass-panel" style="padding: 2rem; text-align: center;">No students found in this class.</div>';
+            return;
+        }
+
+        const totalMarksMap = {
+            'Unit Test I': 20, 'Unit Test II': 20, 'Unit Test III': 20,
+            'Quarterly Exam': 100, 'Half Yearly Exam': 100, 'Annual Exam': 100
+        };
+
+        const getExamTotal = (name) => {
+            if (totalMarksMap[name]) return totalMarksMap[name];
+            if (name.toLowerCase().includes('unit')) return 20;
+            return 100;
+        };
+
+        const calculateGrade = (score, totalMarks = 100) => {
+            const percentage = (score / totalMarks) * 100;
+            if (percentage >= 91) return 'A1';
+            if (percentage >= 81) return 'A2';
+            if (percentage >= 71) return 'B1';
+            if (percentage >= 61) return 'B2';
+            if (percentage >= 51) return 'C1';
+            if (percentage >= 41) return 'C2';
+            if (percentage >= 33) return 'D';
+            return 'E';
+        };
+
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        const selectedClass = classes.find(c => c.id === classId);
+        const classSubjects = getSubjectsByGrade(selectedClass.name);
+        const allSubjects = Storage.get(STORAGE_KEYS.SUBJECTS);
+        // Filter global subjects to only include those relevant to this class
+        const filteredSubjects = allSubjects.filter(s => classSubjects.includes(s.name));
+
+        let html = '';
+
+        if (viewMode === 'broadsheet') {
+            html = this.renderConsolidatedSheet(students, marks, examType, allExamTypes, getExamTotal, calculateGrade, filteredSubjects);
+        } else {
+            students.forEach((student, index) => {
+                const studentMarks = marks.filter(m => m.data && m.data[student.id]);
+
+                html += `
+                    <div class="marksheet-card ${index < students.length - 1 ? 'page-break' : ''}">
+                        <!-- Header -->
+                        <div style="text-align: center; margin-bottom: 1.5rem; border-bottom: 2px solid var(--primary); padding-bottom: 1rem;">
+                            <h2 style="margin: 0; color: var(--primary); font-size: 1.5rem;">SCHOOL MANAGEMENT SYSTEM</h2>
+                            <p style="margin: 2px 0; font-size: 0.75rem; font-weight: 600; color: var(--gray-600);">Academic Session 2025-26</p>
+                            <h3 style="margin-top: 10px; font-size: 1rem; text-decoration: underline;">PROGRESS REPORT</h3>
+                        </div>
+
+                        <!-- Info -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; font-size: 0.8125rem;">
+                            <div>
+                                <strong>Name:</strong> ${student.name}<br>
+                                <strong>Admission No:</strong> ${student.admissionNo}
+                            </div>
+                            <div style="text-align: right;">
+                                <strong>Class:</strong> ${student.className} - ${student.section}<br>
+                                <strong>Exam:</strong> ${examType === 'all' ? 'Annual Summary' : examType}
+                            </div>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="table-responsive">
+                            ${examType === 'all' ? this.renderBulkCumulativeTable(student, studentMarks, allExamTypes) : this.renderBulkDetailedTable(student, studentMarks, examType, getExamTotal, calculateGrade)}
+                        </div>
+
+                        <!-- Footer -->
+                        <div style="margin-top: 2rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; text-align: center; font-size: 0.65rem;">
+                            <div><div style="border-bottom: 1px solid #ccc; margin-bottom: 5px;"></div>CLASS TEACHER</div>
+                            <div><div style="border-bottom: 1px solid #ccc; margin-bottom: 5px;"></div>PRINCIPAL</div>
+                            <div><div style="border-bottom: 1px solid #ccc; margin-bottom: 5px;"></div>PARENT</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        resultsContainer.innerHTML = html;
+        downloadBtn.style.display = 'block';
+        NotificationSystem.showToast('Generated', `Generated ${viewMode === 'broadsheet' ? 'consolidated sheet' : students.length + ' marksheets'}.`, 'success');
+    },
+
+    renderConsolidatedSheet(students, marks, examType, allExamTypes, getExamTotal, calculateGrade, subjects) {
+        // const subjects = Storage.get(STORAGE_KEYS.SUBJECTS); // Now passed as argument
+        const examTotal = examType === 'all' ? 100 : getExamTotal(examType);
+
+        let html = `
+            <div class="marksheet-card">
+                <div style="text-align: center; margin-bottom: 1.5rem;">
+                    <h2 style="margin: 0; color: var(--primary);">CONSOLIDATED MARK SHEET</h2>
+                    <p style="margin: 5px 0; font-weight: 600;">Exam: ${examType === 'all' ? 'Annual Summary' : examType}</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="marks-table">
+                        <thead>
+                            <tr>
+                                <th>S.No</th>
+                                <th>Adm No</th>
+                                <th>Student Name</th>
+                                ${subjects.map(s => `<th style="text-align:center;">${s.name}</th>`).join('')}
+                                <th style="text-align:center;">Total</th>
+                                <th style="text-align:center;">%</th>
+                                <th style="text-align:center;">Grade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        students.forEach((student, idx) => {
+            let studentTotal = 0;
+            let subjectCount = 0;
+            const studentMarks = marks.filter(m => m.data && m.data[student.id]);
+
+            const subScores = subjects.map(s => {
+                let score = 0;
+                if (examType === 'all') {
+                    // Average of all exams for this subject
+                    const subjMarks = studentMarks.filter(m => m.subjectId === s.name);
+                    if (subjMarks.length > 0) {
+                        const sum = subjMarks.reduce((acc, m) => acc + (parseFloat(m.data[student.id]) || 0), 0);
+                        score = sum / subjMarks.length;
+                    }
+                } else {
+                    const mark = studentMarks.find(m => m.subjectId === s.name && m.examId === examType);
+                    score = mark ? parseFloat(mark.data[student.id]) || 0 : 0;
+                }
+                studentTotal += score;
+                subjectCount++;
+                return `<td style="text-align:center;">${score > 0 ? score.toFixed(1) : '-'}</td>`;
+            }).join('');
+
+            const maxTotal = subjectCount * examTotal;
+            const percentage = maxTotal > 0 ? (studentTotal / maxTotal) * 100 : 0;
+            const grade = calculateGrade(studentTotal, maxTotal);
+
+            html += `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td>${student.admissionNo}</td>
+                    <td style="font-weight: 600;">${student.name}</td>
+                    ${subScores}
+                    <td style="text-align:center; font-weight: 700;">${studentTotal.toFixed(1)}</td>
+                    <td style="text-align:center;">${percentage.toFixed(1)}%</td>
+                    <td style="text-align:center;"><span class="grade-badge grade-${grade.charAt(0)}">${grade}</span></td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        return html;
+    },
+
+    renderBulkDetailedTable(student, studentMarks, examType, getExamTotal, calculateGrade) {
+        const examMarks = studentMarks.filter(m => m.examId === examType);
+        const totalMaxMarks = getExamTotal(examType);
+
+        let grandTotalObtained = 0;
+        let grandTotalPossible = 0;
+
+        const rows = examMarks.map(m => {
+            const score = parseFloat(m.data[student.id]) || 0;
+            const percentage = (score / totalMaxMarks) * 100;
+            const grade = calculateGrade(score, totalMaxMarks);
+            grandTotalObtained += score;
+            grandTotalPossible += totalMaxMarks;
+
+            return `
+                <tr>
+                    <td>${m.subjectId}</td>
+                    <td style="text-align: center; font-weight: 600;">${score}</td>
+                    <td style="text-align: center;">${totalMaxMarks}</td>
+                    <td style="text-align: center;">${percentage.toFixed(1)}%</td>
+                    <td style="text-align: center;"><span class="grade-badge grade-${grade.charAt(0)}">${grade}</span></td>
+                </tr>
+            `;
+        }).join('');
+
+        const overallPercentage = grandTotalPossible > 0 ? (grandTotalObtained / grandTotalPossible) * 100 : 0;
+        const overallGrade = calculateGrade(grandTotalObtained / (grandTotalPossible / 100));
+
+        return `
+            <table class="marks-table">
+                <thead>
+                    <tr>
+                        <th>Subject</th>
+                        <th style="text-align: center;">Obtained</th>
+                        <th style="text-align: center;">Max</th>
+                        <th style="text-align: center;">%</th>
+                        <th style="text-align: center;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows || '<tr><td colspan="5" style="text-align:center;">No marks entered.</td></tr>'}
+                </tbody>
+                <tfoot>
+                    <tr style="background: #f3f4f6; font-weight: 700;">
+                        <td>TOTAL</td>
+                        <td style="text-align: center;">${grandTotalObtained.toFixed(1)}</td>
+                        <td style="text-align: center;">${grandTotalPossible}</td>
+                        <td style="text-align: center;">${overallPercentage.toFixed(1)}%</td>
+                        <td style="text-align: center;"><span class="grade-badge grade-${overallGrade.charAt(0)}">${overallGrade}</span></td>
+                    </tr>
+                </tfoot>
+            </table>
+        `;
+    },
+
+    renderBulkCumulativeTable(student, studentMarks, allExamTypes) {
+        const subjects = [...new Set(studentMarks.map(m => m.subjectId))];
+        const examNames = allExamTypes.map(e => e.name);
+
+        return `
+            <table class="marks-table">
+                <thead>
+                    <tr>
+                        <th>Subject</th>
+                        ${examNames.map(name => `<th style="text-align:center; font-size: 0.65rem;">${name}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${subjects.map(sub => `
+                        <tr>
+                            <td style="font-weight: 600;">${sub}</td>
+                            ${examNames.map(exam => {
+            const mark = studentMarks.find(m => m.subjectId === sub && m.examId === exam);
+            return `<td style="text-align:center;">${mark ? mark.data[student.id] : '-'}</td>`;
+        }).join('')}
+                        </tr>
+                    `).join('') || '<tr><td colspan="${examNames.length + 1}" style="text-align:center;">No data.</td></tr>'}
+                </tbody>
+            </table>
+        `;
+    },
+
     loadAdminMarksList() {
         const classId = document.getElementById('admin-exam-class').value;
         const examType = document.getElementById('admin-exam-type').value;
@@ -267,9 +795,9 @@ const AdminModule = {
         const container = document.getElementById('admin-marks-list-container');
 
         // Validation
-        if (!examType) return alert('Please select an exam type');
-        if (!classId) return alert('Please select a class');
-        if (!subject) return alert('Please select a subject');
+        if (!examType) return NotificationSystem.showToast('Input Error', 'Please select an exam type', 'warning');
+        if (!classId) return NotificationSystem.showToast('Input Error', 'Please select a class', 'warning');
+        if (!subject) return NotificationSystem.showToast('Input Error', 'Please select a subject', 'warning');
 
         const classes = Storage.get(STORAGE_KEYS.CLASSES);
         const targetClass = classes.find(c => c.id === classId);
@@ -321,7 +849,7 @@ const AdminModule = {
         });
 
         Storage.saveMarks(examType, classId, subject, marksData);
-        alert('Marks saved successfully!');
+        NotificationSystem.showToast('Success', 'Marks saved successfully!', 'success');
         this.loadAdminMarksList();
     },
 
@@ -338,11 +866,12 @@ const AdminModule = {
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: var(--gray-50);">
                         <tr>
-                            <th style="padding: 1rem; text-align: left;">Class Name</th>
-                            <th style="padding: 1rem; text-align: left;">Section</th>
-                            <th style="padding: 1rem; text-align: left;">Class Teacher</th>
-                            <th style="padding: 1rem; text-align: center;">Actions</th>
-                        </tr>
+                        <th style="padding: 1rem; text-align: left;">Class Name</th>
+                        <th style="padding: 1rem; text-align: left;">Section</th>
+                        <th style="padding: 1rem; text-align: left;">Class Teacher</th>
+                        <th style="padding: 1rem; text-align: center;">Subjects</th>
+                        <th style="padding: 1rem; text-align: center;">Actions</th>
+                    </tr>
                     </thead>
                     <tbody id="classes-table-body"></tbody>
                 </table>
@@ -366,6 +895,10 @@ const AdminModule = {
                 <td style="padding: 1rem;">${cls.name}</td>
                 <td style="padding: 1rem;">${cls.section}</td>
                 <td style="padding: 1rem;">${cls.classTeacher || 'Not Assigned'}</td>
+                <td style="padding: 1rem; text-align: center;">
+                    <span class="badge" style="background: var(--primary-light); color: var(--primary);">${getSubjectsByGrade(cls.name).length}</span>
+                    <button class="btn btn-sm" style="font-size: 0.7rem; padding: 2px 6px;" onclick="AdminModule.showClassSubjects('${cls.id}')">View</button>
+                </td>
                 <td style="padding: 1rem; text-align: center;">
                     <button class="btn" style="color: var(--primary);" onclick="AdminModule.showClassForm('${cls.id}')"><i class="fas fa-edit"></i></button>
                     <button class="btn" style="color: var(--danger);" onclick="AdminModule.deleteClass('${cls.id}')"><i class="fas fa-trash"></i></button>
@@ -435,6 +968,7 @@ const AdminModule = {
                 </button>
             </div>
             <div id="teachers-list" class="glass-panel" style="padding: 0;">
+            <div class="table-responsive">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: var(--gray-50);">
                         <tr>
@@ -446,6 +980,7 @@ const AdminModule = {
                     </thead>
                     <tbody id="teachers-table-body"></tbody>
                 </table>
+            </div>
             </div>
         `;
         this.renderTeachersTable();
@@ -587,13 +1122,27 @@ const AdminModule = {
     // STUDENT MANAGEMENT (Indian format)
     manageStudents(container) {
         container.innerHTML = `
-            <div class="top-bar" style="border: none; margin-bottom: 1rem;">
-                <h2>Student Admission</h2>
-                <button class="btn btn-primary" onclick="AdminModule.showStudentForm()">
-                    <i class="fas fa-plus"></i> New Admission
-                </button>
+            <div class="top-bar" style="border: none; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <h2>Student Admission</h2>
+                    <p style="color: var(--gray-500); font-size: 0.75rem;">Manage all student enrollments and documents.</p>
+                </div>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                    <div class="form-group" style="margin: 0; min-width: 200px;">
+                        <select id="students-class-filter" class="form-control" onchange="AdminModule.renderStudentsTable()">
+                            <option value="all">All Classes</option>
+                            ${Storage.get(STORAGE_KEYS.CLASSES).map(cls => `
+                                <option value="${cls.id}">${cls.name} - ${cls.section}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="AdminModule.showStudentForm()">
+                        <i class="fas fa-plus"></i> New Admission
+                    </button>
+                </div>
             </div>
     <div id="students-list" class="glass-panel" style="padding: 0;">
+    <div class="table-responsive">
         <table style="width: 100%; border-collapse: collapse;">
             <thead style="background: var(--gray-50);">
                 <tr>
@@ -607,17 +1156,27 @@ const AdminModule = {
             <tbody id="students-table-body"></tbody>
         </table>
     </div>
-`;
+    </div>
+        `;
         this.renderStudentsTable();
     },
 
     renderStudentsTable() {
-        const students = Storage.get(STORAGE_KEYS.STUDENTS);
+        let students = Storage.get(STORAGE_KEYS.STUDENTS);
+        const filterDropdown = document.getElementById('students-class-filter');
+        const selectedClassId = filterDropdown ? filterDropdown.value : 'all';
+
+        if (selectedClassId !== 'all') {
+            students = students.filter(s => s.classId === selectedClassId);
+        }
+
         const tbody = document.getElementById('students-table-body');
         if (!tbody) return;
 
         if (students.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--gray-400);">No students enrolled.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--gray-400);">
+                ${selectedClassId === 'all' ? 'No students enrolled.' : 'No students found in this class.'}
+            </td></tr>`;
             return;
         }
 
@@ -646,12 +1205,14 @@ const AdminModule = {
     showStudentForm(studentId = null) {
         const s = studentId ? Storage.getItemById(STORAGE_KEYS.STUDENTS, studentId) : {
             name: '', admissionNo: '', className: '', section: '', gender: 'Male', dob: '',
-            guardianName: '', guardianMobile: '', address: '', photo: ''
+            guardianName: '', contact: '', address: '', photo: null, classId: '',
+            status: 'Active', rollNo: '', transport: 'Bus', bloodGroup: '',
+            house: '', admissionDate: new Date().toISOString()
         };
         const classes = Storage.get(STORAGE_KEYS.CLASSES);
 
         const content = `
-            <div id="student-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div id="student-form" class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                 <div class="form-group" style="grid-column: span 2; text-align: center;">
                     <div id="photo-preview" style="width: 100px; height: 100px; border-radius: 50%; background: #f0f0f0; margin: 0 auto 10px; overflow: hidden; border: 2px solid var(--primary);">
                         ${s.photo ? `<img src="${s.photo}" style="width:100%; height:100%; object-fit:cover;">` : `<i class="fas fa-camera fa-2x" style="margin-top: 30px; color: #ccc;"></i>`}
@@ -762,7 +1323,7 @@ const AdminModule = {
             if (file) {
                 const reader = new FileReader();
                 reader.onload = (re) => {
-                    document.getElementById('photo-preview').innerHTML = `< img src = "${re.target.result}" style = "width:100%; height:100%; object-fit:cover;" > `;
+                    document.getElementById('photo-preview').innerHTML = `<img src="${re.target.result}" style="width:100%; height:100%; object-fit:cover;">`;
                 };
                 reader.readAsDataURL(file);
             }
@@ -793,8 +1354,8 @@ const AdminModule = {
         ];
 
         const content = `
-    < div style = "padding: 1rem;" >
-        <p style="margin-bottom: 2rem; color: var(--gray-600);">Manage documents for <strong>${student.name}</strong></p>
+            <div style="padding: 1rem;">
+                <p style="margin-bottom: 2rem; color: var(--gray-600);">Manage documents for <strong>${student.name}</strong></p>
                 ${docTypes.map(doc => `
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--gray-50); border-radius: 8px; margin-bottom: 1rem;">
                         <div>
@@ -829,7 +1390,7 @@ const AdminModule = {
                     </div>
                 `).join('')
             }
-            </div >
+            </div>
     `;
 
         this.showModal(`Documents: ${student.name} `, content, () => this.closeModal());
@@ -841,7 +1402,7 @@ const AdminModule = {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
 
-        if (file.size > 2 * 1024 * 1024) return alert('File size must be under 2MB');
+        if (file.size > 2 * 1024 * 1024) return NotificationSystem.showToast('Error', 'File size must be under 2MB', 'error');
 
         const processFile = (base64) => {
             const allDocs = Storage.get(STORAGE_KEYS.DOCUMENTS);
@@ -855,7 +1416,7 @@ const AdminModule = {
             }
 
             Storage.save(STORAGE_KEYS.DOCUMENTS, allDocs);
-            alert('Document uploaded successfully!');
+            NotificationSystem.showToast('Success', 'Document uploaded successfully!', 'success');
             this.manageStudentDocuments(studentId); // Refresh modal
         };
 
@@ -871,14 +1432,52 @@ const AdminModule = {
     },
 
     // SUBJECT MANAGEMENT
+    cleanupDuplicateSubjects() {
+        const subjects = Storage.get(STORAGE_KEYS.SUBJECTS);
+        const uniqueSubjects = [];
+        const seenNames = new Set();
+        let hasDuplicates = false;
+
+        subjects.forEach(s => {
+            const lowerName = s.name.trim().toLowerCase();
+            if (!seenNames.has(lowerName)) {
+                seenNames.add(lowerName);
+                uniqueSubjects.push(s);
+            } else {
+                hasDuplicates = true;
+            }
+        });
+
+        if (hasDuplicates) {
+            Storage.save(STORAGE_KEYS.SUBJECTS, uniqueSubjects);
+            console.log('Cleaned up duplicate subjects.');
+            if (document.getElementById('subjects-table-body')) {
+                this.renderSubjectsTable();
+            }
+        }
+    },
+
     manageSubjects(container) {
+        this.cleanupDuplicateSubjects();
         container.innerHTML = `
-    < div class="top-bar" style = "border: none; margin-bottom: 1rem;" >
+            <div class="top-bar" style="border: none; margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem;">
                 <h2>Subject Management</h2>
+                <div style="flex-grow: 1;">
+                    <select id="filter-subject-grade" class="form-control" style="max-width: 250px;" onchange="AdminModule.renderSubjectsTable()">
+                        <option value="all">All School Subjects</option>
+                        <optgroup label="Levels">
+                            <option value="Pre-Primary">Pre-Primary</option>
+                            <option value="Primary">Primary</option>
+                            <option value="Middle">Middle</option>
+                            <option value="Secondary">Secondary</option>
+                            <option value="Senior Secondary">Senior Secondary</option>
+                        </optgroup>
+                    </select>
+                </div>
                 <button class="btn btn-primary" onclick="AdminModule.showSubjectForm()">
                     <i class="fas fa-plus"></i> Add Subject
                 </button>
-            </div >
+            </div>
     <div id="subjects-list" class="glass-panel" style="padding: 0;">
         <table style="width: 100%; border-collapse: collapse;">
             <thead style="background: var(--gray-50);">
@@ -897,31 +1496,81 @@ const AdminModule = {
 
     renderSubjectsTable() {
         const subjects = Storage.get(STORAGE_KEYS.SUBJECTS);
+        const filterVal = document.getElementById('filter-subject-grade')?.value || 'all';
         const tbody = document.getElementById('subjects-table-body');
         if (!tbody) return;
 
-        if (subjects.length === 0) {
-            tbody.innerHTML = `< tr > <td colspan="3" style="padding: 2rem; text-align: center; color: var(--gray-400);">No subjects added yet.</td></tr > `;
+        let filteredSubjects = subjects;
+        if (filterVal !== 'all') {
+            // Get all subjects for this level/grade
+            let subjectsInFilter = [];
+            if (SCHOOL_CURRICULUM[filterVal]) {
+                // It's a level
+                for (const grade in SCHOOL_CURRICULUM[filterVal]) {
+                    subjectsInFilter = [...subjectsInFilter, ...SCHOOL_CURRICULUM[filterVal][grade]];
+                }
+            } else {
+                // It's a specific grade (future proofing)
+                subjectsInFilter = getSubjectsByGrade(filterVal);
+            }
+
+            filteredSubjects = subjects.filter(s => subjectsInFilter.includes(s.name));
+        }
+
+        if (filteredSubjects.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" style="padding: 2rem; text-align: center; color: var(--gray-400);">No subjects found for this selection.</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = subjects.map(s => `
-    < tr style = "border-bottom: 1px solid var(--gray-100);" >
+        tbody.innerHTML = filteredSubjects.map(s => `
+            <tr style="border-bottom: 1px solid var(--gray-100);">
                 <td style="padding: 1rem; font-weight: 600;">${s.name}</td>
                 <td style="padding: 1rem;">${s.code || 'N/A'}</td>
                 <td style="padding: 1rem; text-align: center;">
                     <button class="btn" style="color: var(--primary);" onclick="AdminModule.showSubjectForm('${s.id}')"><i class="fas fa-edit"></i></button>
                     <button class="btn" style="color: var(--danger);" onclick="AdminModule.deleteSubject('${s.id}')"><i class="fas fa-trash"></i></button>
                 </td>
-            </tr >
+            </tr>
     `).join('');
+    },
+
+    showClassSubjects(classId) {
+        const cls = Storage.getItemById(STORAGE_KEYS.CLASSES, classId);
+        const subjects = getSubjectsByGrade(cls.name);
+
+        const content = `
+            <div class="glass-panel" style="background: var(--gray-50); margin-bottom: 1rem;">
+                <p><strong>Class:</strong> ${cls.name} - ${cls.section}</p>
+                <p><strong>Total Subjects:</strong> ${subjects.length}</p>
+            </div>
+    <div class="glass-panel" style="padding: 0;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: var(--gray-100);">
+                    <th style="padding: 10px; text-align: left;">#</th>
+                    <th style="padding: 10px; text-align: left;">Subject Name</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${subjects.map((s, i) => `
+                            <tr style="border-bottom: 1px solid var(--gray-100);">
+                                <td style="padding: 10px;">${i + 1}</td>
+                                <td style="padding: 10px; font-weight: 500;">${s}</td>
+                            </tr>
+                        `).join('')}
+            </tbody>
+        </table>
+    </div>
+`;
+
+        this.showModal(`Subjects for ${cls.name}`, content, () => this.closeModal());
     },
 
     showSubjectForm(subjectId = null) {
         const s = subjectId ? Storage.getItemById(STORAGE_KEYS.SUBJECTS, subjectId) : { name: '', code: '' };
 
         const content = `
-    < form id = "subject-form" >
+            <form id="subject-form">
                 <div class="form-group">
                     <label class="form-label">Subject Name</label>
                     <input type="text" id="subj-name" class="form-control" value="${s.name}" placeholder="e.g., Mathematics" required>
@@ -930,18 +1579,30 @@ const AdminModule = {
                     <label class="form-label">Subject Code</label>
                     <input type="text" id="subj-code" class="form-control" value="${s.code}" placeholder="e.g., MATH-101">
                 </div>
-            </form >
+            </form>
     `;
 
         this.showModal(subjectId ? 'Edit Subject' : 'Add Subject', content, () => {
             const data = {
-                name: document.getElementById('subj-name').value,
-                code: document.getElementById('subj-code').value
+                name: document.getElementById('subj-name').value.trim(),
+                code: document.getElementById('subj-code').value.trim()
             };
+
+            if (!data.name) return NotificationSystem.showToast('Error', 'Subject Name is required', 'error');
+
+            const subjects = Storage.get(STORAGE_KEYS.SUBJECTS);
+            const exists = subjects.find(s => s.name.toLowerCase() === data.name.toLowerCase() && s.id !== subjectId);
+
+            if (exists) {
+                return NotificationSystem.showToast('Error', 'Subject already exists!', 'error');
+            }
+
             if (subjectId) {
                 Storage.updateItem(STORAGE_KEYS.SUBJECTS, subjectId, data);
+                NotificationSystem.showToast('Success', 'Subject updated successfully', 'success');
             } else {
                 Storage.addItem(STORAGE_KEYS.SUBJECTS, data);
+                NotificationSystem.showToast('Success', 'Subject added successfully', 'success');
             }
             this.closeModal();
             this.manageSubjects(document.getElementById('content-area'));
@@ -956,98 +1617,160 @@ const AdminModule = {
     },
 
     manageFees(container) {
-        const structure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE);
-        const payments = Storage.get(STORAGE_KEYS.FEES);
-        const students = Storage.get(STORAGE_KEYS.STUDENTS);
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        const feeStructure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE) || {};
 
-        const exams = [
-            '1st Mid Term', 'Quarterly Exam', '2nd Mid Term',
-            'Half Yearly Exam', '3rd Mid Term', 'Annual Exam'
-        ];
-
-        if (structure.length === 0) {
-            const initial = exams.map(name => ({ name, amount: 1500 }));
-            Storage.save(STORAGE_KEYS.FEE_STRUCTURE, initial);
+        // Initialize/Enforce Minimum Fee of 15,000
+        let modified = false;
+        classes.forEach(cls => {
+            if (!feeStructure[cls.id] || feeStructure[cls.id] < 15000) {
+                feeStructure[cls.id] = 15000;
+                modified = true;
+            }
+        });
+        if (modified) {
+            Storage.save(STORAGE_KEYS.FEE_STRUCTURE, feeStructure);
         }
 
-        const currentStructure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE);
-
         container.innerHTML = `
-    < div style = "display: grid; grid-template-columns: 1fr 2.5fr; gap: 1.5rem;" >
-                < !--Left: Fee Structure Settings-- >
-                <div class="glass-panel" style="padding: 1.5rem;">
-                    <h3>Fee Structure</h3>
-                    <p style="color: var(--gray-500); font-size: 0.75rem; margin-bottom: 1.5rem;">Set standard amounts for each term.</p>
+            <div class="glass-panel" style="margin-bottom: 1.5rem; padding: 10px;">
+                <div style="display: flex; gap: 10px; background: var(--gray-50); padding: 5px; border-radius: 12px; max-width: 400px;">
+                    <button class="btn fee-tab active" id="btn-revise-tab" onclick="AdminModule.switchFeeTab('revise')" style="flex: 1; font-weight: 600;">
+                        <i class="fas fa-edit"></i> Revise Payment
+                    </button>
+                    <button class="btn fee-tab" id="btn-students-tab" onclick="AdminModule.switchFeeTab('students')" style="flex: 1; font-weight: 600;">
+                        <i class="fas fa-history"></i> Students Payment
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab 1: Revise Payment (Structure) -->
+            <div id="section-fee-revise" class="fee-section active">
+                <div class="glass-panel" style="padding: 2rem;">
+                    <div style="margin-bottom: 2rem;">
+                        <h2>Class Fee Revision</h2>
+                        <p style="color: var(--gray-500); font-size: 0.875rem;">Set the total annual school fee for each grade. Minimum: ₹15,000.</p>
+                    </div>
                     
-                    <div style="display: grid; gap: 0.75rem;">
-                        ${currentStructure.map((exam, index) => `
-                            <div class="glass-card" style="padding: 0.75rem;">
-                                <div style="font-size: 0.8125rem; font-weight: 600; margin-bottom: 5px;">${exam.name}</div>
-                                <div style="display: flex; align-items: center; gap: 5px;">
-                                    <span style="font-size: 0.75rem; color: var(--gray-400);">₹</span>
-                                    <input type="number" class="form-control" style="width: 100%; height: 32px; font-size: 0.8125rem;" 
-                                           value="${exam.amount}" 
-                                           onchange="AdminModule.updateExamFee('${exam.name}', this.value)">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+                        ${classes.map(cls => `
+                            <div class="glass-card" style="padding: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 700; color: var(--gray-900);">${cls.name}</div>
+                                    <div style="font-size: 0.75rem; color: var(--gray-500);">Section: ${cls.section}</div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-weight: 600; color: var(--gray-400);">₹</span>
+                                    <input type="number" class="form-control" style="width: 120px; font-weight: 700; text-align: right;" 
+                                           value="${feeStructure[cls.id]}" 
+                                           onchange="AdminModule.updateClassFee('${cls.id}', this.value)">
                                 </div>
                             </div>
-                        `).join('')}
+                        `).join('') || '<p style="text-align: center; color: var(--gray-400); grid-column: 1/-1;">No classes found.</p>'}
                     </div>
                 </div>
 
-                <!--Right: Payment History & Reporting-- >
-    <div class="glass-panel" style="padding: 1.5rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-            <div>
-                <h3>Received Payments</h3>
-                <p style="color: var(--gray-500); font-size: 0.75rem;">Global transaction log across all students.</p>
-            </div>
-            <button class="btn btn-primary" onclick="AdminModule.downloadFeeReport()">
-                <i class="fas fa-file-download"></i> Download Report (CSV)
-            </button>
-        </div>
+                <!--New: Payment Configuration Settings-->
+                <div class="glass-panel" style="padding: 1.5rem; margin-top: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+                        <div>
+                            <h3>Merchant Payment Settings</h3>
+                            <p style="color: var(--gray-500); font-size: 0.75rem;">Configure the destination bank and UPI details for student fee collections.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="AdminModule.savePaymentConfig()">
+                            <i class="fas fa-save"></i> Save Config
+                        </button>
+                    </div>
 
-        <div style="overflow-x: auto; border-radius: 8px; border: 1px solid var(--gray-100);">
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
-                <thead style="background: var(--gray-50);">
-                    <tr>
-                        <th style="padding: 12px; text-align: left;">Receipt</th>
-                        <th style="padding: 12px; text-align: left;">Student</th>
-                        <th style="padding: 12px; text-align: left;">Term</th>
-                        <th style="padding: 12px; text-align: left;">Amount</th>
-                        <th style="padding: 12px; text-align: left;">Date</th>
-                        <th style="padding: 12px; text-align: left;">Method</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${payments.reverse().map(p => {
-            const student = students.find(s => s.id === p.studentId) || { name: 'Unknown' };
-            return `
-                                        <tr style="border-bottom: 1px solid var(--gray-100);">
-                                            <td style="padding: 12px; font-weight: 600;">#${p.id}</td>
-                                            <td style="padding: 12px;">${student.name}</td>
-                                            <td style="padding: 12px;">${p.examName}</td>
-                                            <td style="padding: 12px; font-weight: 600;">₹${p.amount}</td>
-                                            <td style="padding: 12px;">${new Date(p.date).toLocaleDateString()}</td>
-                                            <td style="padding: 12px;"><span class="badge" style="background: var(--success-light); color: var(--success); font-size: 0.7rem;">${p.method}</span></td>
-                                        </tr>
-                                    `;
-        }).join('') || '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--gray-400);">No payment records found.</td></tr>'}
-                </tbody>
-            </table>
-        </div>
-    </div>
-            </div >
-    `;
+                    ${(() => {
+                const config = Storage.get(STORAGE_KEYS.PAYMENT_CONFIG) || {
+                    bankName: 'International School Bank',
+                    accountNumber: '9182736455',
+                    ifsc: 'SMS0001234',
+                    upiId: 'school@upi',
+                    merchantName: 'School Management System'
+                };
+                return `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                            <div class="form-group">
+                                <label class="form-label">Merchant/School Name</label>
+                                <input type="text" id="pay-merchant" class="form-control" value="${config.merchantName}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">School UPI ID</label>
+                                <input type="text" id="pay-upi" class="form-control" value="${config.upiId}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Bank Name</label>
+                                <input type="text" id="pay-bank" class="form-control" value="${config.bankName}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Account Number</label>
+                                <input type="text" id="pay-acc" class="form-control" value="${config.accountNumber}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">IFSC Code</label>
+                                <input type="text" id="pay-ifsc" class="form-control" value="${config.ifsc}">
+                            </div>
+                        </div>
+                        `;
+            })()}
+                </div>
+            </div>
+
+            <!-- Tab 2: Students Payment (Logs) -->
+            <div id="section-fee-students" class="fee-section" style="display: none;">
+                <div class="glass-panel" style="padding: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1.5rem;">
+                        <div>
+                            <h2>Student Payment Records</h2>
+                            <p style="color: var(--gray-500); font-size: 0.875rem;">Track all fee transactions across the school.</p>
+                        </div>
+                        <div style="display: flex; gap: 1rem; align-items: center;">
+                            <div class="form-group" style="margin: 0; min-width: 200px;">
+                                <select id="fee-class-filter" class="form-control" onchange="AdminModule.filterFeePayments()">
+                                    <option value="all">🔍 All Classes</option>
+                                    ${classes.map(c => `<option value="${c.id}">${c.name} - ${c.section}</option>`).join('')}
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" onclick="AdminModule.downloadFeeReport()">
+                                <i class="fas fa-file-download"></i> CSV Report
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="fee-payments-table-container" class="table-responsive" style="border-radius: 12px; border: 1px solid var(--gray-100);">
+                        <!-- Table rendered here -->
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Load initial table for Tab 2
+        this.filterFeePayments();
+    },
+
+    savePaymentConfig() {
+        const config = {
+            merchantName: document.getElementById('pay-merchant').value,
+            upiId: document.getElementById('pay-upi').value,
+            bankName: document.getElementById('pay-bank').value,
+            accountNumber: document.getElementById('pay-acc').value,
+            ifsc: document.getElementById('pay-ifsc').value,
+            updatedAt: new Date().toISOString()
+        };
+        Storage.save(STORAGE_KEYS.PAYMENT_CONFIG, config);
+        NotificationSystem.showToast('Success', 'Payment gateway configuration updated!', 'success');
     },
 
     downloadFeeReport() {
         const payments = Storage.get(STORAGE_KEYS.FEES);
         const students = Storage.get(STORAGE_KEYS.STUDENTS);
 
-        if (payments.length === 0) return alert('No payment records to download.');
+        if (payments.length === 0) return NotificationSystem.showToast('No Data', 'No payment records to download.', 'info');
 
         // Format CSV data
-        const headers = ['Receipt ID', 'Student Name', 'Admission No', 'Exam Term', 'Amount (INR)', 'Date', 'Payment Method'];
+        const headers = ['Receipt ID', 'Student Name', 'Admission No', 'Details', 'Amount (INR)', 'Date', 'Payment Method'];
         const csvRows = [headers.join(',')];
 
         payments.forEach(p => {
@@ -1056,7 +1779,7 @@ const AdminModule = {
                 p.id,
                 `"${s.name}"`,
                 s.admissionNo,
-                `"${p.examName}"`,
+                `"${p.description || 'School Fee'}"`,
                 p.amount,
                 new Date(p.date).toLocaleDateString(),
                 p.method
@@ -1068,11 +1791,11 @@ const AdminModule = {
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `EduFlow_Fee_Report_${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute("download", `SMS_Fee_Report_${new Date().toISOString().split('T')[0]}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        alert('Report downloaded successfully!');
+        NotificationSystem.showToast('Success', 'Report downloaded successfully!', 'success');
     },
 
     manageExamTypes(container) {
@@ -1105,7 +1828,7 @@ const AdminModule = {
                     `).join('') || '<p style="color: var(--gray-400);">No exam categories defined yet.</p>'}
                 </div>
             </div>
-        `;
+    `;
     },
 
     showExamTypeForm(id = null) {
@@ -1120,7 +1843,7 @@ const AdminModule = {
                     <i class="fas fa-info-circle"></i> This name will appear in dropdowns for teachers and as column headers in student report cards.
                 </p>
             </form>
-        `;
+    `;
 
         this.showModal(id ? 'Edit Exam Category' : 'Add New Exam Category', content, () => {
             const data = {
@@ -1145,71 +1868,245 @@ const AdminModule = {
 
     manageAttendance(container) {
         const classes = Storage.get(STORAGE_KEYS.CLASSES);
-        const now = new Date();
-        const currentMonth = now.getMonth() + 1;
-        const currentYear = now.getFullYear();
+        const today = new Date().toISOString().split('T')[0];
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
         container.innerHTML = `
-    < div class="glass-panel" style = "padding: 2rem;" >
+            <div class="glass-panel" style="padding: 2rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                     <div>
                         <h2 style="margin: 0;">Attendance Analytics & Reports</h2>
-                        <p style="color: var(--gray-500); font-size: 0.875rem;">Generate and download monthly attendance summaries for any class.</p>
+                        <p style="color: var(--gray-500); font-size: 0.875rem;">Generate reports or view live attendance analytics across a date range.</p>
                     </div>
                 </div>
 
-                <div class="glass-card" style="padding: 1.5rem; max-width: 600px; margin-bottom: 2rem;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="glass-card" style="padding: 1.5rem; margin-bottom: 2rem;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                        <div class="form-group">
+                            <label class="form-label">Start Date</label>
+                            <input type="date" id="rep-start-date" class="form-control" value="${thirtyDaysAgo}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">End Date</label>
+                            <input type="date" id="rep-end-date" class="form-control" value="${today}">
+                        </div>
                         <div class="form-group">
                             <label class="form-label">Select Class</label>
-                            <select id="rep-class" class="form-control">
+                            <select id="rep-class" class="form-control" onchange="AdminModule.toggleExportOptions(this.value)">
+                                <option value="all">📁 All Classes</option>
                                 ${classes.map(c => `<option value="${c.id}">${c.name} - ${c.section}</option>`).join('')}
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Select Month</label>
-                            <select id="rep-month" class="form-control">
-                                ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((m, i) => `
-                                    <option value="${i + 1}" ${i + 1 === currentMonth ? 'selected' : ''}>${m}</option>
-                                `).join('')}
-                            </select>
+                    </div>
+
+                    <!-- Export Options Section (Conditional) -->
+                    <div id="export-options-section" style="margin-bottom: 2rem; padding: 1rem; background: var(--gray-50); border-radius: 8px; border: 1px solid var(--gray-200);">
+                        <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 700;">Export Format</label>
+                        <div style="display: flex; gap: 2rem;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="export-mode" value="single" checked> Single Combined File
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="export-mode" value="multiple"> Multiple Separate Files
+                            </label>
                         </div>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-                        <div class="form-group">
-                            <label class="form-label">Select Year</label>
-                            <select id="rep-year" class="form-control">
-                                <option value="${currentYear}">${currentYear}</option>
-                                <option value="${currentYear - 1}">${currentYear - 1}</option>
-                            </select>
-                        </div>
+
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button class="btn btn-primary" style="flex: 1; min-width: 200px;" onclick="AdminModule.viewAttendanceAnalytics()">
+                            <i class="fas fa-chart-bar"></i> View Analytics
+                        </button>
+                        <button class="btn" style="flex: 1; min-width: 200px; background: var(--success); color: white;" onclick="AdminModule.downloadAttendanceReport()">
+                            <i class="fas fa-file-download"></i> Download Report (CSV)
+                        </button>
                     </div>
-                    <button class="btn btn-primary" style="width: 100%;" onclick="AdminModule.downloadAttendanceReport()">
-                        <i class="fas fa-file-download"></i> Download Monthly Report (CSV)
-                    </button>
                 </div>
 
-                <div style="background: rgba(79, 70, 229, 0.05); border: 1px dashed var(--primary); padding: 1.5rem; border-radius: 8px;">
-                    <p style="margin: 0; font-size: 0.875rem; color: var(--gray-600);">
-                        <i class="fas fa-info-circle"></i> <strong>Report Contents:</strong> The CSV file will include student names, total working days, days present, days absent, and overall percentage for the selected month.
-                    </p>
+                <div id="attendance-results-container">
+                    <div style="background: rgba(79, 70, 229, 0.05); border: 1px dashed var(--primary); padding: 1.5rem; border-radius: 8px;">
+                        <p style="margin: 0; font-size: 0.875rem; color: var(--gray-600);">
+                            <i class="fas fa-info-circle"></i> <strong>How it works:</strong> Select a date range and a class. Use <strong>View Analytics</strong> to see the data immediately, or <strong>Download Report</strong> to get a CSV file. For "All Classes", you can choose to get one large file or several individual ones.
+                        </p>
+                    </div>
                 </div>
-            </div >
-    `;
+            </div>
+        `;
+    },
+
+    toggleExportOptions(val) {
+        const section = document.getElementById('export-options-section');
+        if (section) {
+            section.style.display = (val === 'all') ? 'block' : 'none';
+        }
+    },
+
+    viewAttendanceAnalytics() {
+        const classId = document.getElementById('rep-class').value;
+        const startDate = document.getElementById('rep-start-date').value;
+        const endDate = document.getElementById('rep-end-date').value;
+        const container = document.getElementById('attendance-results-container');
+
+        if (classId === 'all') {
+            return NotificationSystem.showToast('Select a Class', 'Please select a specific class to view analytics.', 'warning');
+        }
+
+        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
+        const attendance = Storage.get(STORAGE_KEYS.ATTENDANCE).filter(a => {
+            return a.classId === classId && a.date >= startDate && a.date <= endDate;
+        });
+
+        if (attendance.length === 0) {
+            container.innerHTML = `<div class="glass-panel" style="padding: 2rem; text-align: center; color: var(--gray-400);">No attendance records found for this period.</div>`;
+            return;
+        }
+
+        const stats = students.map(s => {
+            const studentStats = attendance.reduce((acc, curr) => {
+                const status = curr.data[s.id];
+                if (status === 'present') acc.present++;
+                else if (status === 'absent') acc.absent++;
+                acc.total++;
+                return acc;
+            }, { present: 0, absent: 0, total: 0 });
+
+            return {
+                ...s,
+                ...studentStats,
+                percentage: studentStats.total > 0 ? ((studentStats.present / studentStats.total) * 100).toFixed(1) : '0.0'
+            };
+        });
+
+        container.innerHTML = `
+            <div class="glass-panel" style="margin-top: 2rem; overflow-x: auto;">
+                <h3 style="margin-top: 0;">Analytics: ${startDate} to ${endDate}</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                    <thead>
+                        <tr style="background: var(--gray-50); border-bottom: 1px solid var(--gray-200);">
+                            <th style="padding: 12px; text-align: left;">Roll No</th>
+                            <th style="padding: 12px; text-align: left;">Student Name</th>
+                            <th style="padding: 12px; text-align: center;">Total Days</th>
+                            <th style="padding: 12px; text-align: center;">Present</th>
+                            <th style="padding: 12px; text-align: center;">Absent</th>
+                            <th style="padding: 12px; text-align: right;">Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${stats.map(s => `
+                            <tr style="border-bottom: 1px solid var(--gray-100);">
+                                <td style="padding: 12px; font-weight: 600;">${s.admissionNo}</td>
+                                <td style="padding: 12px;">${s.name}</td>
+                                <td style="padding: 12px; text-align: center;">${s.total}</td>
+                                <td style="padding: 12px; text-align: center; color: var(--success); font-weight: 600;">${s.present}</td>
+                                <td style="padding: 12px; text-align: center; color: var(--danger); font-weight: 600;">${s.absent}</td>
+                                <td style="padding: 12px; text-align: right;">
+                                    <span class="badge" style="background: ${s.percentage >= 75 ? 'var(--success-light)' : '#fee2e2'}; color: ${s.percentage >= 75 ? 'var(--success)' : '#991b1b'};">
+                                        ${s.percentage}%
+                                    </span>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
     },
 
     downloadAttendanceReport() {
         const classId = document.getElementById('rep-class').value;
-        const month = parseInt(document.getElementById('rep-month').value);
-        const year = parseInt(document.getElementById('rep-year').value);
+        const startDate = document.getElementById('rep-start-date').value;
+        const endDate = document.getElementById('rep-end-date').value;
 
-        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
-        const attendance = Storage.get(STORAGE_KEYS.ATTENDANCE).filter(a => {
-            const d = new Date(a.date);
-            return a.classId === classId && (d.getMonth() + 1) === month && d.getFullYear() === year;
+        if (classId === 'all') {
+            const mode = document.querySelector('input[name="export-mode"]:checked')?.value || 'single';
+            if (mode === 'single') {
+                this.generateCombinedAttendanceCSV(startDate, endDate);
+            } else {
+                this.exportAllAttendanceReports(startDate, endDate);
+            }
+            return;
+        }
+
+        this.generateAttendanceCSV(classId, startDate, endDate);
+    },
+
+    exportAllAttendanceReports(startDate, endDate) {
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        let count = 0;
+
+        classes.forEach((cls, index) => {
+            // Add a small delay between downloads to prevent browser blocking
+            setTimeout(() => {
+                this.generateAttendanceCSV(cls.id, startDate, endDate);
+            }, index * 500);
+            count++;
         });
 
-        if (attendance.length === 0) return alert('No attendance records found for this period.');
+        NotificationSystem.showToast('Export Started', `Downloading reports for ${count} classes (separate files)...`, 'success');
+    },
+
+    generateCombinedAttendanceCSV(startDate, endDate) {
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        const students = Storage.get(STORAGE_KEYS.STUDENTS);
+        const attendance = Storage.get(STORAGE_KEYS.ATTENDANCE).filter(a => a.date >= startDate && a.date <= endDate);
+
+        if (attendance.length === 0) {
+            return NotificationSystem.showToast('No Data', 'No attendance records found for this period.', 'info');
+        }
+
+        const headers = ['Class', 'Admission No', 'Student Name', 'Total Days', 'Present', 'Absent', 'Percentage (%)'];
+        const csvRows = [headers.join(',')];
+
+        classes.forEach(cls => {
+            const classStudents = students.filter(s => s.classId === cls.id);
+            const classAttendance = attendance.filter(a => a.classId === cls.id);
+
+            if (classAttendance.length > 0) {
+                classStudents.forEach(s => {
+                    const studentStats = classAttendance.reduce((acc, curr) => {
+                        const status = curr.data[s.id];
+                        if (status === 'present') acc.present++;
+                        else if (status === 'absent') acc.absent++;
+                        acc.total++;
+                        return acc;
+                    }, { present: 0, absent: 0, total: 0 });
+
+                    const percentage = studentStats.total > 0 ? ((studentStats.present / studentStats.total) * 100).toFixed(1) : '0.0';
+
+                    csvRows.push([
+                        `"${cls.name}"`,
+                        s.admissionNo,
+                        `"${s.name}"`,
+                        studentStats.total,
+                        studentStats.present,
+                        studentStats.absent,
+                        percentage
+                    ].join(','));
+                });
+            }
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Combined_Attendance_Report_${startDate}_to_${endDate}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        NotificationSystem.showToast('Success', 'Combined report downloaded successfully!', 'success');
+    },
+
+    generateAttendanceCSV(classId, startDate, endDate) {
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
+        const cls = classes.find(c => c.id === classId) || { name: 'Unknown' };
+
+        const attendance = Storage.get(STORAGE_KEYS.ATTENDANCE).filter(a => {
+            return a.classId === classId && a.date >= startDate && a.date <= endDate;
+        });
+
+        if (attendance.length === 0) return; // Skip if no data for this class
 
         const headers = ['Admission No', 'Student Name', 'Total Days', 'Present', 'Absent', 'Percentage (%)'];
         const csvRows = [headers.join(',')];
@@ -1239,11 +2136,10 @@ const AdminModule = {
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Attendance_Report_${classId}_${month}_${year}.csv`);
+        link.setAttribute("download", `Attendance_Report_${cls.name}_${startDate}_to_${endDate}.csv`);
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
-        alert('Attendance report downloaded successfully!');
+        NotificationSystem.showToast('Success', 'Attendance report downloaded successfully!', 'success');
     },
 
     manageStorage(container) {
@@ -1251,9 +2147,20 @@ const AdminModule = {
 
         container.innerHTML = `
             <div class="glass-panel" style="padding: 2rem;">
-                <div style="margin-bottom: 2rem;">
-                    <h2>System Database (Local Storage)</h2>
-                    <p style="color: var(--gray-500); font-size: 0.875rem;">Directly view and manage the underlying browser storage keys.</p>
+                <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2>System Database (Local Storage)</h2>
+                        <p style="color: var(--gray-500); font-size: 0.875rem;">Directly view and manage the underlying browser storage keys.</p>
+                    </div>
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn glass-panel" onclick="Storage.exportAllData(); NotificationSystem.showToast('Backup', 'System backup downloaded successfully!', 'success');">
+                            <i class="fas fa-file-export"></i> Export System Backup
+                        </button>
+                        <label class="btn btn-primary" style="cursor: pointer;">
+                            <i class="fas fa-file-import"></i> Import Restore File
+                            <input type="file" id="restore-file-input" style="display: none;" accept=".json" onchange="AdminModule.handleRestore(this)">
+                        </label>
+                    </div>
                 </div>
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
@@ -1279,7 +2186,7 @@ const AdminModule = {
         }).join('')}
                 </div>
             </div>
-    `;
+        `;
     },
 
     viewStorageData(key) {
@@ -1292,15 +2199,15 @@ const AdminModule = {
         if (isArray && hasData && typeof data[0] === 'object') {
             const columns = Object.keys(data[0]);
             tableHtml = `
-    < div style = "overflow-x: auto; border: 1px solid var(--gray-100); border-radius: 8px;" >
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
-            <thead style="background: var(--gray-50);">
-                <tr>
-                    ${columns.map(col => `<th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--gray-100);">${col}</th>`).join('')}
-                </tr>
-            </thead>
-            <tbody>
-                ${data.map(row => `
+                <div style="overflow-x: auto; border: 1px solid var(--gray-100); border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+                        <thead style="background: var(--gray-50);">
+                            <tr>
+                                ${columns.map(col => `<th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--gray-100);">${col}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(row => `
                                 <tr style="border-bottom: 1px solid var(--gray-100);">
                                     ${columns.map(col => {
                 let val = row[col];
@@ -1310,14 +2217,14 @@ const AdminModule = {
             }).join('')}
                                 </tr>
                             `).join('')}
-            </tbody>
-        </table>
-                </div >
-    `;
+                        </tbody>
+                    </table>
+                </div>
+            `;
         }
 
         const content = `
-    < div id = "storage-viewer-container" >
+            <div id="storage-viewer-container">
                 <div style="display: flex; gap: 10px; margin-bottom: 1.5rem;">
                     <button class="btn btn-primary" onclick="document.getElementById('tabular-view').style.display='block'; document.getElementById('json-view').style.display='none'">
                         <i class="fas fa-table"></i> Table View
@@ -1325,7 +2232,7 @@ const AdminModule = {
                     <button class="btn glass-panel" onclick="document.getElementById('tabular-view').style.display='none'; document.getElementById('json-view').style.display='block'">
                         <i class="fas fa-code"></i> Raw JSON
                     </button>
-                    <button class="btn" style="margin-left: auto;" onclick="navigator.clipboard.writeText(JSON.stringify(window.activeStorageData, null, 4)); alert('JSON copied to clipboard!')">
+                    <button class="btn" style="margin-left: auto;" onclick="navigator.clipboard.writeText(JSON.stringify(window.activeStorageData, null, 4)); NotificationSystem.showToast('Copied', 'JSON copied to clipboard!', 'success')">
                         <i class="fas fa-copy"></i> Copy JSON
                     </button>
                 </div>
@@ -1334,15 +2241,13 @@ const AdminModule = {
                     ${tableHtml}
                 </div>
 
-                </div>
-
                 <div id="json-view" style="display: none;">
                     <pre style="background: #1e1e1e; color: #d4d4d4; padding: 1.5rem; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 0.75rem; max-height: 400px; overflow: auto; white-space: pre-wrap; margin: 0;">${JSON.stringify(data, null, 4)}</pre>
                 </div>
             </div>
     `;
 
-        this.showModal(`Database Explorer: ${key} `, content, () => {
+        this.showModal(`Database Explorer: ${key}`, content, () => {
             this.closeModal();
         });
 
@@ -1353,12 +2258,122 @@ const AdminModule = {
         }
     },
 
-    updateExamFee(name, amount) {
-        const structure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE);
-        const index = structure.findIndex(s => s.name === name);
-        if (index > -1) {
-            structure[index].amount = parseInt(amount) || 0;
-            Storage.save(STORAGE_KEYS.FEE_STRUCTURE, structure);
+    updateClassFee(classId, amount) {
+        let structure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE);
+        if (Array.isArray(structure) || typeof structure !== 'object') {
+            structure = {};
+        }
+
+        const val = parseInt(amount) || 0;
+        if (val < 15000) {
+            NotificationSystem.showToast('Minimum Required', 'Annual fee cannot be less than ₹15,000.', 'warning');
+            // Reset to 15000 in UI if user tries to set lower
+            const container = document.getElementById('content-area');
+            this.manageFees(container);
+            return;
+        }
+
+        structure[classId] = val;
+        Storage.save(STORAGE_KEYS.FEE_STRUCTURE, structure);
+        NotificationSystem.showToast('Updated', 'Class fee updated successfully.', 'success');
+    },
+
+    switchFeeTab(tab) {
+        // Update Buttons
+        document.querySelectorAll('.fee-tab').forEach(b => b.classList.remove('active', 'btn-primary'));
+        document.getElementById(`btn-${tab}-tab`).classList.add('active', 'btn-primary');
+
+        // Update Sections
+        document.querySelectorAll('.fee-section').forEach(s => s.style.display = 'none');
+        document.getElementById(`section-fee-${tab}`).style.display = 'block';
+    },
+
+    filterFeePayments() {
+        const classId = document.getElementById('fee-class-filter')?.value || 'all';
+        const container = document.getElementById('fee-payments-table-container');
+        if (!container) return;
+
+        const payments = Storage.get(STORAGE_KEYS.FEES);
+        const students = Storage.get(STORAGE_KEYS.STUDENTS);
+        const classes = Storage.get(STORAGE_KEYS.CLASSES);
+        const feeStructure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE) || {};
+
+        if (classId === 'all') {
+            const filteredPayments = [...payments].reverse();
+            container.innerHTML = `
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+                    <thead style="background: var(--gray-50);">
+                        <tr>
+                            <th style="padding: 12px; text-align: left;">Receipt ID</th>
+                            <th style="padding: 12px; text-align: left;">Student Name</th>
+                            <th style="padding: 12px; text-align: left;">Class</th>
+                            <th style="padding: 12px; text-align: left;">Amount Paid</th>
+                            <th style="padding: 12px; text-align: left;">Date</th>
+                            <th style="padding: 12px; text-align: left;">Method</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filteredPayments.map(p => {
+                const student = students.find(s => s.id === p.studentId) || { name: 'Unknown', classId: '' };
+                const cls = classes.find(c => c.id === student.classId) || { name: 'N/A' };
+                return `
+                                <tr style="border-bottom: 1px solid var(--gray-100);">
+                                    <td style="padding: 12px; font-weight: 600;">#${p.id}</td>
+                                    <td style="padding: 12px;">${student.name}</td>
+                                    <td style="padding: 12px;"><span class="badge" style="background: var(--primary-light); color: var(--primary);">${cls.name}</span></td>
+                                    <td style="padding: 12px; font-weight: 700; color: var(--success);">₹${p.amount}</td>
+                                    <td style="padding: 12px;">${new Date(p.date).toLocaleDateString()}</td>
+                                    <td style="padding: 12px;"><span class="badge" style="background: var(--gray-50); color: var(--gray-600);">${p.method}</span></td>
+                                </tr>
+                            `;
+            }).join('') || '<tr><td colspan="6" style="padding: 3rem; text-align: center; color: var(--gray-400);">No payment records found.</td></tr>'}
+                    </tbody>
+                </table>
+            `;
+        } else {
+            const classStudents = students.filter(s => s.classId === classId);
+            const totalFee = feeStructure[classId] || 0;
+
+            container.innerHTML = `
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+                    <thead style="background: var(--gray-50);">
+                        <tr>
+                            <th style="padding: 12px; text-align: left;">Admission No</th>
+                            <th style="padding: 12px; text-align: left;">Student Name</th>
+                            <th style="padding: 12px; text-align: left;">Total Fee</th>
+                            <th style="padding: 12px; text-align: left;">Paid</th>
+                            <th style="padding: 12px; text-align: left;">Balance</th>
+                            <th style="padding: 12px; text-align: left;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${classStudents.map(s => {
+                const studentPayments = payments.filter(p => p.studentId === s.id);
+                const paid = studentPayments.reduce((sum, p) => sum + p.amount, 0);
+                const balance = totalFee - paid;
+                let statusBadge = '';
+                if (paid === 0) {
+                    statusBadge = '<span class="badge" style="background: #fee2e2; color: #991b1b;">UNPAID</span>';
+                } else if (balance <= 0) {
+                    statusBadge = '<span class="badge" style="background: var(--success-light); color: var(--success);">FULLY PAID</span>';
+                } else {
+                    statusBadge = '<span class="badge" style="background: #fef3c7; color: #92400e;">PARTIAL</span>';
+                }
+
+                return `
+                                <tr style="border-bottom: 1px solid var(--gray-100);">
+                                    <td style="padding: 12px; font-weight: 600;">${s.admissionNo}</td>
+                                    <td style="padding: 12px;">${s.name}</td>
+                                    <td style="padding: 12px;">₹${totalFee}</td>
+                                    <td style="padding: 12px; font-weight: 700; color: var(--success);">₹${paid}</td>
+                                    <td style="padding: 12px; font-weight: 700; color: ${balance > 0 ? 'var(--danger)' : 'var(--success)'};">₹${balance}</td>
+                                    <td style="padding: 12px;">${statusBadge}</td>
+                                </tr>
+                            `;
+            }).join('') || '<tr><td colspan="6" style="padding: 3rem; text-align: center; color: var(--gray-400);">No students found in this class.</td></tr>'}
+                    </tbody>
+                </table>
+            `;
         }
     },
 
@@ -1367,7 +2382,7 @@ const AdminModule = {
         const notifications = Storage.get(STORAGE_KEYS.NOTIFICATIONS) || [];
         const teachers = Storage.get(STORAGE_KEYS.TEACHERS);
         const students = Storage.get(STORAGE_KEYS.STUDENTS);
-        
+
         // Group notifications by user
         const userMap = {};
         notifications.forEach(notif => {
@@ -1417,22 +2432,22 @@ const AdminModule = {
                     <h4 style="margin-top: 0;">Notification Types</h4>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem;">
                         ${Object.entries(stats.typeCount).map(([type, count]) => {
-                            const typeIcons = {
-                                'homework': 'fas fa-book-open',
-                                'notice': 'fas fa-bullhorn',
-                                'attendance': 'fas fa-calendar-check',
-                                'fees': 'fas fa-money-bill',
-                                'marks': 'fas fa-file-invoice',
-                                'system': 'fas fa-cog'
-                            };
-                            return `
+            const typeIcons = {
+                'homework': 'fas fa-book-open',
+                'notice': 'fas fa-bullhorn',
+                'attendance': 'fas fa-calendar-check',
+                'fees': 'fas fa-money-bill',
+                'marks': 'fas fa-file-invoice',
+                'system': 'fas fa-cog'
+            };
+            return `
                                 <div style="padding: 1rem; background: #f9fafb; border-radius: 8px; text-align: center; border: 1px solid #e5e7eb;">
                                     <i class="${typeIcons[type] || 'fas fa-bell'}" style="font-size: 1.5rem; color: #6366f1; display: block; margin-bottom: 0.5rem;"></i>
                                     <p style="margin: 0; font-size: 0.875rem; color: #6b7280; text-transform: capitalize;">${type}</p>
                                     <h4 style="margin: 0.25rem 0 0 0; color: #111827;">${count}</h4>
                                 </div>
                             `;
-                        }).join('')}
+        }).join('')}
                     </div>
                 </div>
 
@@ -1471,7 +2486,7 @@ const AdminModule = {
                                     </td>
                                     <td style="padding: 1rem; color: #374151; font-size: 0.875rem;">
                                         <div>${notif.title}</div>
-                                        <div style="color: #9ca3af; font-size: 0.75rem; margin-top: 0.25rem;">${notif.message.substring(0, 50)}...</div>
+                                        <div style="color: #9ca3af; font-size: 0.75rem; margin-top: 0.25rem;">${(notif.message || '').substring(0, 50)}...</div>
                                     </td>
                                     <td style="padding: 1rem; color: #374151; font-size: 0.875rem;">
                                         <span style="background: ${notif.read ? '#f0fdf4' : '#fef2f2'}; color: ${notif.read ? '#15803d' : '#dc2626'}; padding: 0.25rem 0.75rem; border-radius: 12px;">
@@ -1505,7 +2520,7 @@ const AdminModule = {
         // Send to all teachers
         teachers.forEach(teacher => {
             const notification = {
-                id: `notif-sys-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `notif - sys - ${Date.now()} -${Math.random().toString(36).substr(2, 9)} `,
                 userId: teacher.username,
                 userRole: 'teacher',
                 type: 'system',
@@ -1524,7 +2539,7 @@ const AdminModule = {
             count++;
         });
 
-        alert(`System notification sent to ${count} teachers and ${students.length} students!`);
+        NotificationSystem.showToast('Broadcast Sent', `System notification sent to ${count} teachers and ${students.length} students!`, 'success');
     },
 
     clearOldNotifications() {
@@ -1537,7 +2552,40 @@ const AdminModule = {
         const removed = notifications.length - filtered.length;
 
         Storage.save(STORAGE_KEYS.NOTIFICATIONS, filtered);
-        alert(`Deleted ${removed} old notifications!`);
+        NotificationSystem.showToast('Cleanup Done', `Deleted ${removed} old notifications!`, 'success');
+    },
+
+    async handleRestore(input) {
+        if (!input.files || !input.files[0]) return;
+        if (!confirm('WARNING: This will overwrite ALL existing data. Are you sure?')) return;
+
+        try {
+            await Storage.importAllData(input.files[0]);
+            NotificationSystem.showToast('Restore Success', 'Data restored successfully! The page will now reload.', 'success');
+            setTimeout(() => window.location.reload(), 2000);
+        } catch (error) {
+            NotificationSystem.showToast('Restore Failed', error.message, 'error');
+        }
+    },
+
+    checkBackupReminder() {
+        const lastBackup = localStorage.getItem('sms_backup_last_date');
+        const now = Date.now();
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+        if (!lastBackup || (now - parseInt(lastBackup)) > sevenDaysMs) {
+            const daysSince = lastBackup ? Math.floor((now - parseInt(lastBackup)) / (24 * 60 * 60 * 1000)) : 'many';
+            NotificationSystem.showToast(
+                'Backup Reminder',
+                `It has been ${daysSince} days since your last system backup.We recommend exporting your data soon.`,
+                'warning'
+            );
+        }
     }
 };
+
+// Periodic backup check
+if (Auth.isAuthenticated() && Auth.getCurrentUser().role === 'admin') {
+    setTimeout(() => AdminModule.checkBackupReminder(), 5000);
+}
 
