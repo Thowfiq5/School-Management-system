@@ -18,7 +18,8 @@ const STORAGE_KEYS = {
     USERS: 'sms_users', // For login system
     EXAM_TYPES: 'sms_exam_types',
     SUBMISSIONS: 'sms_submissions',
-    NOTIFICATIONS: 'sms_notifications'
+    NOTIFICATIONS: 'sms_notifications',
+    PAYMENT_CONFIG: 'sms_payment_config'
 };
 
 const Storage = {
@@ -38,7 +39,7 @@ const Storage = {
             localStorage.setItem(key, JSON.stringify(data));
         } catch (error) {
             console.error(`Error saving to storage (${key}):`, error);
-            alert('Storage full or disabled! Data may not be saved.');
+            NotificationSystem.showToast('Storage Warning', 'Disk full or storage disabled! Data may not be saved.', 'warning');
         }
     },
 
@@ -70,7 +71,7 @@ const Storage = {
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
-                
+
                 // Compress to JPEG with 0.7 quality
                 callback(canvas.toDataURL('image/jpeg', 0.7));
             };
@@ -172,6 +173,80 @@ const Storage = {
             });
         }
         this.save(STORAGE_KEYS.MARKS, marks);
+    },
+
+    // Backup & Restore
+    exportAllData() {
+        const data = {};
+        Object.keys(STORAGE_KEYS).forEach(key => {
+            const storageKey = STORAGE_KEYS[key];
+            const value = localStorage.getItem(storageKey);
+            if (value) {
+                try {
+                    data[storageKey] = JSON.parse(value);
+                } catch (e) {
+                    data[storageKey] = value;
+                }
+            }
+        });
+
+        // Include login attempts and other non-standard keys if needed
+        const extraKeys = ['sms_login_attempts', 'sms_backup_last_date'];
+        extraKeys.forEach(key => {
+            const value = localStorage.getItem(key);
+            if (value) {
+                try {
+                    data[key] = JSON.parse(value);
+                } catch (e) {
+                    data[key] = value;
+                }
+            }
+        });
+
+        const blob = new Blob([JSON.stringify(data, null, 4)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const filename = `SMS_Backup_${new Date().toISOString().split('T')[0]}.json`;
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        localStorage.setItem('sms_backup_last_date', Date.now().toString());
+        return true;
+    },
+
+    async importAllData(jsonFile) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+
+                    // Basic validation
+                    if (!data[STORAGE_KEYS.USERS] && !data[STORAGE_KEYS.STUDENTS]) {
+                        throw new Error('Invalid backup file format');
+                    }
+
+                    // Clear and restore
+                    // We keep a temporary backup in case user cancels? No, just clear and restore as requested.
+                    // Important: notify user to refresh after import.
+
+                    Object.keys(data).forEach(key => {
+                        const value = data[key];
+                        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+                    });
+
+                    resolve(true);
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            reader.onerror = () => reject(new Error('File reading failed'));
+            reader.readAsText(jsonFile);
+        });
     }
 };
 
