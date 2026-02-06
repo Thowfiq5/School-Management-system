@@ -29,7 +29,7 @@ const StudentModule = {
         container.innerHTML = `
             <div class="glass-panel" style="padding: 2.5rem; text-align: center; margin-bottom: 2rem; background: linear-gradient(rgba(79, 70, 229, 0.05), rgba(79, 70, 229, 0.05)); border: 1px solid var(--primary);">
                 <i class="fas fa-school fa-3x" style="color: var(--primary); margin-bottom: 1rem;"></i>
-                <h2 style="font-size: 2rem; margin-bottom: 0.5rem;">Welcome to EduFlow Portal</h2>
+                <h2 style="font-size: 2rem; margin-bottom: 0.5rem;">Welcome to Portal</h2>
                 
                 ${(() => {
                 const student = this.getStudentData(user);
@@ -72,7 +72,7 @@ const StudentModule = {
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+            <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
                 <div>
                     <h3>Latest School Notices</h3>
                     <div style="margin-top: 1rem; display: grid; gap: 1rem;">
@@ -104,7 +104,11 @@ const StudentModule = {
         const student = this.getStudentData(user);
         if (!student) return container.innerHTML = '<p>Student records not found in the system.</p>';
 
-        // If for some reason the student doesn't have a class, or the user wants them to SELECT/CONFIRM
+        // Auto-select class for students
+        if (user.role === 'student' && student.classId) {
+            sessionStorage.setItem('selectedClassId', student.classId);
+        }
+
         const classes = Storage.get(STORAGE_KEYS.CLASSES);
 
         // This is the "Select the Class" part the user requested
@@ -187,17 +191,19 @@ const StudentModule = {
 
         // Fee Alert Logic
         const feeStructure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE);
+        const classFee = (feeStructure && typeof feeStructure === 'object') ? (feeStructure[student.classId] || 0) : 0;
         const payments = Storage.get(STORAGE_KEYS.FEES).filter(p => p.studentId === student.id);
-        const pendingExams = feeStructure.filter(f => !payments.some(p => p.examName === f.name));
+        const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+        const balance = classFee - totalPaid;
 
         let feeAlertHtml = '';
-        if (pendingExams.length > 0) {
+        if (balance > 0) {
             feeAlertHtml = `
                 <div class="glass-panel" style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); padding: 1rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem;">
                     <i class="fas fa-exclamation-circle fa-2x" style="color: var(--danger);"></i>
                     <div style="flex: 1;">
-                        <h4 style="margin: 0; color: var(--danger);">Pending Fees Detected</h4>
-                        <p style="margin: 0; font-size: 0.8125rem;">You have ${pendingExams.length} unpaid examination fees (e.g., ${pendingExams[0].name}). Please clear them to access your admit cards.</p>
+                        <h4 style="margin: 0; color: var(--danger);">Pending Fee detected</h4>
+                        <p style="margin: 0; font-size: 0.8125rem;">You have a pending balance of <strong>₹ ${balance}</strong>. Please clear your dues to ensure uninterrupted access to school services.</p>
                     </div>
                     <button class="btn btn-primary" style="background: var(--danger); border: none;" onclick="loadModule('viewFees', 'view-fees', 'Fee Status')">Pay Now</button>
                 </div>
@@ -237,20 +243,29 @@ const StudentModule = {
                 </div>
             </div>
             
-            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+            <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
                 <div>
                     <div class="glass-panel" style="padding: 1.5rem; margin-bottom: 1.5rem;">
                         <h3>My Subjects & Teachers</h3>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
-                            ${subjects.map(sub => {
-            const teacher = teachers.find(t => t.subject === sub.name) || { name: 'Assigned' };
-            return `
-                                    <div class="glass-card" style="padding: 1rem; border-left: 3px solid var(--primary);">
-                                        <div style="font-weight: 700;">${sub.name}</div>
-                                        <div style="font-size: 0.75rem; color: var(--gray-500); margin-top: 5px;">${teacher.name}</div>
+                            ${(() => {
+                const allSubjects = Storage.get(STORAGE_KEYS.SUBJECTS);
+                const classSubjectNames = getSubjectsByGrade(selectedClass.name);
+                const classSubjects = allSubjects.filter(s => classSubjectNames.includes(s.name));
+
+                return classSubjects.map(sub => {
+                    // Find a teacher who teaches this subject AND is assigned to this class
+                    const teacher = teachers.find(t => t.subject === sub.name && t.assignedClassIds.includes(selectedClassId)) || { name: 'Assigned' };
+                    return `
+                                    <div class="glass-card" style="padding: 1rem; border-left: 3px solid var(--primary); display: flex; flex-direction: column; justify-content: space-between; height: 100%;">
+                                        <div style="font-weight: 700; color: var(--gray-900);">${sub.name}</div>
+                                        <div style="font-size: 0.75rem; color: var(--gray-500); margin-top: 8px; display: flex; align-items: center; gap: 4px;">
+                                            <i class="fas fa-chalkboard-teacher" style="font-size: 0.65rem;"></i> ${teacher.name}
+                                        </div>
                                     </div>
                                 `;
-        }).join('')}
+                }).join('');
+            })()}
                         </div>
                     </div>
 
@@ -304,6 +319,18 @@ const StudentModule = {
                 </div>
             </div>
         `;
+    },
+
+    confirmClassSelection() {
+        const classId = document.getElementById('student-class-select').value;
+        if (!classId) return NotificationSystem.showToast('Selection Required', 'Please select a class to continue.', 'warning');
+
+        sessionStorage.setItem('selectedClassId', classId);
+
+        // Reload dashboard
+        const user = Auth.getCurrentUser();
+        const container = document.getElementById('content-area');
+        this.studentDashboard(container, user);
     },
 
     viewAttendance(container, user) {
@@ -416,156 +443,201 @@ const StudentModule = {
 
     viewReportCard(container, user) {
         const student = this.getStudentData(user);
+        if (!student) return container.innerHTML = '<p>Student records not found.</p>';
+
         const marks = Storage.get(STORAGE_KEYS.MARKS);
         const allExamTypes = Storage.get(STORAGE_KEYS.EXAM_TYPES);
         const allSubjects = Storage.get(STORAGE_KEYS.SUBJECTS);
 
-        // Get selected filters from session or default to 'all'
         const selectedExam = sessionStorage.getItem('reportFilterExam') || 'all';
-        const selectedSubject = sessionStorage.getItem('reportFilterSubject') || 'all';
 
-        let studentMarks = marks.filter(m => m.data[student.id]);
+        // Filter marks for this student
+        const studentMarks = marks.filter(m => m.data && m.data[student.id]);
 
-        // Apply filters
-        if (selectedExam !== 'all') {
-            studentMarks = studentMarks.filter(m => m.examId === selectedExam);
-        }
-        if (selectedSubject !== 'all') {
-            studentMarks = studentMarks.filter(m => m.subjectId === selectedSubject);
-        }
+        const totalMarksMap = {
+            'Unit Test I': 20,
+            'Unit Test II': 20,
+            'Unit Test III': 20,
+            'Quarterly Exam': 100,
+            'Half Yearly Exam': 100,
+            'Annual Exam': 100
+        };
 
-        // Get unique exams found in records, but filter and SORT them based on the master EXAM_TYPES list
-        const registeredExamNames = [...new Set(studentMarks.map(m => m.examId))];
-        const uniqueExams = allExamTypes
-            .filter(et => registeredExamNames.includes(et.name))
-            .map(et => et.name);
-
-        // Fallback for any exams not in master list
-        registeredExamNames.forEach(name => {
-            if (!uniqueExams.includes(name)) uniqueExams.push(name);
-        });
-
-        const uniqueSubjects = [...new Set(studentMarks.map(m => m.subjectId))];
+        const getExamTotal = (name) => {
+            if (totalMarksMap[name]) return totalMarksMap[name];
+            if (name.toLowerCase().includes('unit')) return 20;
+            if (name.toLowerCase().includes('monthly')) return 50;
+            return 100;
+        };
 
         container.innerHTML = `
             <style>
                 @media print {
                     body * { visibility: hidden; }
                     #report-card-print, #report-card-print * { visibility: visible; }
-                    #report-card-print { position: absolute; left: 0; top: 0; width: 100%; border: none; box-shadow: none; }
-                    .btn-print-hide, .filter-controls { display: none !important; }
+                    #report-card-print { position: absolute; left: 0; top: 0; width: 100%; border: none; box-shadow: none; padding: 0 !important; }
+                    .btn-print-hide, .filter-controls, .nav-sidebar, .top-bar { display: none !important; }
                 }
+                .marks-table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
+                .marks-table th, .marks-table td { padding: 12px; border: 1px solid var(--gray-200); text-align: left; }
+                .marks-table th { background: var(--gray-50); color: var(--gray-700); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; }
+                .marks-table tfoot { font-weight: 700; background: var(--gray-50); }
+                .grade-badge { padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; }
+                .grade-A { background: #dcfce7; color: #166534; }
+                .grade-B { background: #dbeafe; color: #1e40af; }
+                .grade-C { background: #fef9c3; color: #854d0e; }
+                .grade-D { background: #ffedd5; color: #9a3412; }
+                .grade-E { background: #fee2e2; color: #991b1b; }
             </style>
 
-            <!-- Filter Controls -->
             <div class="glass-panel filter-controls" style="padding: 1.5rem; margin-bottom: 2rem;">
-                <h3 style="margin-bottom: 1rem;">Filter Marksheet</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; align-items: flex-end;">
-                    <div class="form-group">
-                        <label class="form-label">Exam Type</label>
-                        <select id="filter-exam" class="form-control" onchange="StudentModule.applyReportFilters()">
-                            <option value="all">All Exams</option>
-                            ${allExamTypes.map(e => `<option value="${e.name}" ${selectedExam === e.name ? 'selected' : ''}>${e.name}</option>`).join('')}
-                        </select>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <div class="form-group" style="margin: 0; min-width: 200px;">
+                            <label class="form-label" style="font-size: 0.75rem;">Select Exam Type</label>
+                            <select id="filter-exam" class="form-control" onchange="StudentModule.applyReportFilters()">
+                                <option value="all" ${selectedExam === 'all' ? 'selected' : ''}>Cumulative View (All Exams)</option>
+                                ${allExamTypes.map(e => `<option value="${e.name}" ${selectedExam === e.name ? 'selected' : ''}>${e.name}</option>`).join('')}
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Subject</label>
-                        <select id="filter-subject" class="form-control" onchange="StudentModule.applyReportFilters()">
-                            <option value="all">All Subjects</option>
-                            ${allSubjects.map(s => `<option value="${s.name}" ${selectedSubject === s.name ? 'selected' : ''}>${s.name}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <button class="btn btn-primary" onclick="window.print()">
-                            <i class="fas fa-print"></i> Print Marksheet
-                        </button>
-                    </div>
+                    <button class="btn btn-primary" onclick="window.print()">
+                        <i class="fas fa-print"></i> Print Marksheet
+                    </button>
                 </div>
             </div>
 
-            <div class="glass-panel" style="padding: 2.5rem; max-width: 900px; margin: 0 auto; background: white;" id="report-card-print">
-                
-                <div style="text-align: center; border-bottom: 2px solid var(--primary); padding-bottom: 1rem; margin-bottom: 2rem;">
-                    <div style="font-size: 2.5rem; font-weight: 800; color: var(--primary); letter-spacing: -1px;">EDUFLOW</div>
-                    <p style="font-weight: 600; text-transform: uppercase; letter-spacing: 2px;">International School</p>
-                    <p style="font-size: 0.8125rem; color: var(--gray-500);">Academic Session 2025-26</p>
-                    <p style="font-size: 1.125rem; font-weight: 700; color: var(--gray-800); margin-top: 10px;">PROGRESS REPORT</p>
+            <div class="glass-panel" style="padding: 3rem; max-width: 900px; margin: 0 auto; background: white; color: #1a1a1a;" id="report-card-print">
+                <div style="text-align: center; margin-bottom: 2.5rem; border-bottom: 2px solid var(--primary); padding-bottom: 1.5rem;">
+                    <h1 style="margin: 0; color: var(--primary); font-size: 2.5rem; letter-spacing: -1px;">SCHOOL MANAGEMENT SYSTEM</h1>
+                    <p style="margin: 5px 0; font-weight: 600; letter-spacing: 3px; color: var(--gray-600);">INTERNATIONAL SCHOOL</p>
+                    <p style="font-size: 0.8125rem; color: var(--gray-400);">Academic Session 2025-26</p>
+                    <h2 style="margin-top: 15px; font-size: 1.25rem; text-decoration: underline;">PROGRESS REPORT</h2>
                 </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 2rem; font-size: 0.875rem;">
-                    <div style="display: grid; gap: 8px;">
-                        <div><strong style="color: var(--gray-400); text-transform: uppercase; font-size: 0.7rem;">Student Name</strong><br><span style="font-size: 1.125rem; font-weight: 700;">${student.name}</span></div>
-                        <div><strong style="color: var(--gray-400); text-transform: uppercase; font-size: 0.7rem;">Admission No</strong><br><span>${student.admissionNo}</span></div>
+
+                <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2.5rem; font-size: 0.875rem;">
+                    <div style="display: grid; gap: 10px;">
+                        <div><strong style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Student Name</strong><br><span style="font-size: 1.125rem; font-weight: 700;">${student.name}</span></div>
+                        <div><strong style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Admission No</strong><br><span>${student.admissionNo}</span></div>
                     </div>
-                    <div style="display: grid; gap: 8px; text-align: right;">
-                        <div><strong style="color: var(--gray-400); text-transform: uppercase; font-size: 0.7rem;">Class & Section</strong><br><span style="font-size: 1.125rem; font-weight: 700;">${student.className} - ${student.section}</span></div>
-                        <div><strong style="color: var(--gray-400); text-transform: uppercase; font-size: 0.7rem;">Report Generated</strong><br><span>${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+                    <div style="display: grid; gap: 10px; text-align: right;">
+                        <div><strong style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Class & Section</strong><br><span style="font-weight: 600;">${student.className} - ${student.section}</span></div>
+                        <div><strong style="color: var(--gray-400); font-size: 0.7rem; text-transform: uppercase;">Exam Type</strong><br><span style="color: var(--primary); font-weight: 700;">${selectedExam === 'all' ? 'Annual Summary' : selectedExam}</span></div>
                     </div>
                 </div>
 
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 2rem; border: 2px solid var(--gray-800);">
-                        <thead>
-                            <tr style="background: var(--gray-800); color: white;">
-                                <th style="padding: 12px; text-align: left; border: 1px solid var(--gray-700);">SCHOLASTIC AREAS</th>
-                                ${uniqueExams.map(exam => `<th style="padding: 12px; text-align: center; border: 1px solid var(--gray-700); font-size: 0.75rem;">${exam}</th>`).join('')}
-                                <th style="padding: 12px; text-align: center; border: 1px solid var(--gray-700); background: var(--primary);">GRADE</th>
-                            </tr>
-                        </thead>
-                                <td style="padding: 12px; border: 1px solid var(--gray-300); text-align: center; color: var(--primary);">
-                                    SESSION 2025-26
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                <div class="table-responsive">
+                    ${selectedExam === 'all' ? this.renderCumulativeTable(student, studentMarks, allExamTypes) : this.renderDetailedTable(student, studentMarks, selectedExam, getExamTotal)}
                 </div>
 
-                <div style="background: var(--gray-50); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
-                        <div>
-                            <p style="font-size: 0.75rem; color: var(--gray-400); text-transform: uppercase;">Promotional Status</p>
-                            <h4 style="margin: 0;">Promoted to Next Session</h4>
-                        </div>
-                        <div style="text-align: right;">
-                            <p style="font-size: 0.75rem; color: var(--gray-400); text-transform: uppercase;">Class Teacher's Remark</p>
-                            <p style="margin: 0; font-style: italic;">"Displays consistent performance with active participation."</p>
-                        </div>
-                    </div>
+                <div style="margin-top: 3rem; background: var(--gray-50); padding: 1.5rem; border-radius: 8px;">
+                    <p style="font-size: 0.7rem; color: var(--gray-400); text-transform: uppercase; margin-bottom: 5px;">Class Teacher's Remarks</p>
+                    <p style="margin: 0; font-style: italic; color: var(--gray-700);">"Excellent performance overall. Keeping a consistent effort will ensure even better results in the future."</p>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 4rem; text-align: center;">
-                    <div>
-                        <div style="height: 40px; border-bottom: 1px dashed var(--gray-400); margin-bottom: 8px;"></div>
-                        <span style="font-size: 0.75rem; text-transform: uppercase;">Class Teacher</span>
-                    </div>
-                    <div>
-                        <div style="height: 40px; border-bottom: 1px dashed var(--gray-400); margin-bottom: 8px;"></div>
-                        <span style="font-size: 0.75rem; text-transform: uppercase;">Examination Incharge</span>
-                    </div>
-                    <div>
-                        <div style="height: 40px; border-bottom: 1px dashed var(--gray-400); margin-bottom: 8px;"></div>
-                        <span style="font-size: 0.75rem; text-transform: uppercase;">Principal</span>
-                    </div>
+                <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; margin-top: 5rem; text-align: center;">
+                    <div><div style="border-bottom: 1px solid var(--gray-300); margin-bottom: 8px;"></div><span style="font-size: 0.65rem; text-transform: uppercase;">Class Teacher</span></div>
+                    <div><div style="border-bottom: 1px solid var(--gray-300); margin-bottom: 8px;"></div><span style="font-size: 0.65rem; text-transform: uppercase;">Principal</span></div>
+                    <div><div style="border-bottom: 1px solid var(--gray-300); margin-bottom: 8px;"></div><span style="font-size: 0.65rem; text-transform: uppercase;">Parent</span></div>
                 </div>
-            </div>
-            
-            <div style="text-align: center; margin-top: 2rem;" class="btn-print-hide">
-                <button class="btn btn-primary" onclick="window.print()">
-                    <i class="fas fa-print"></i> Download Official PDF Report
-                </button>
             </div>
         `;
     },
 
-    calculateGrade(score) {
-        if (score >= 91) return 'A1';
-        if (score >= 81) return 'A2';
-        if (score >= 71) return 'B1';
-        if (score >= 61) return 'B2';
-        if (score >= 51) return 'C1';
-        if (score >= 41) return 'C2';
-        if (score >= 33) return 'D';
-        return 'E (Needed Improvement)';
+    renderDetailedTable(student, studentMarks, selectedExam, getExamTotal) {
+        const examMarks = studentMarks.filter(m => m.examId === selectedExam);
+        const totalMaxMarks = getExamTotal(selectedExam);
+
+        let grandTotalObtained = 0;
+        let grandTotalPossible = 0;
+
+        const rows = examMarks.map(m => {
+            const score = parseFloat(m.data[student.id]) || 0;
+            const percentage = (score / totalMaxMarks) * 100;
+            const grade = this.calculateGrade(score, totalMaxMarks);
+            grandTotalObtained += score;
+            grandTotalPossible += totalMaxMarks;
+
+            return `
+                <tr>
+                    <td>${m.subjectId}</td>
+                    <td style="text-align: center; font-weight: 600;">${score}</td>
+                    <td style="text-align: center;">${totalMaxMarks}</td>
+                    <td style="text-align: center;">${percentage.toFixed(1)}%</td>
+                    <td style="text-align: center;"><span class="grade-badge grade-${grade.charAt(0)}">${grade}</span></td>
+                </tr>
+            `;
+        }).join('');
+
+        const overallPercentage = grandTotalPossible > 0 ? (grandTotalObtained / grandTotalPossible) * 100 : 0;
+        const overallGrade = this.calculateGrade(grandTotalObtained / (grandTotalPossible / 100)); // Normalize to 100 scale
+
+        return `
+            <table class="marks-table">
+                <thead>
+                    <tr>
+                        <th>Scholastic Areas</th>
+                        <th style="text-align: center;">Marks Obtained</th>
+                        <th style="text-align: center;">Max Marks</th>
+                        <th style="text-align: center;">Percentage</th>
+                        <th style="text-align: center;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows || '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--gray-400);">No results available for this exam.</td></tr>'}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>GRAND TOTAL</td>
+                        <td style="text-align: center; color: var(--primary);">${grandTotalObtained.toFixed(1)}</td>
+                        <td style="text-align: center;">${grandTotalPossible}</td>
+                        <td style="text-align: center; color: var(--primary);">${overallPercentage.toFixed(1)}%</td>
+                        <td style="text-align: center;"><span class="grade-badge grade-${overallGrade.charAt(0)}">${overallGrade}</span></td>
+                    </tr>
+                </tfoot>
+            </table>
+        `;
+    },
+
+    renderCumulativeTable(student, studentMarks, allExamTypes) {
+        const subjects = [...new Set(studentMarks.map(m => m.subjectId))];
+        const examNames = allExamTypes.map(e => e.name);
+
+        return `
+            <table class="marks-table">
+                <thead>
+                    <tr>
+                        <th>Subject</th>
+                        ${examNames.map(name => `<th style="text-align:center; font-size: 0.7rem;">${name}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${subjects.map(sub => {
+            return `
+                            <tr>
+                                <td style="font-weight: 600;">${sub}</td>
+                                ${examNames.map(exam => {
+                const mark = studentMarks.find(m => m.subjectId === sub && m.examId === exam);
+                return `<td style="text-align:center;">${mark ? mark.data[student.id] : '-'}</td>`;
+            }).join('')}
+                            </tr>
+                        `;
+        }).join('')}
+                </tbody>
+            </table>
+        `;
+    },
+
+    calculateGrade(score, totalMarks = 100) {
+        const percentage = (score / totalMarks) * 100;
+        if (percentage >= 91) return 'A1';
+        if (percentage >= 81) return 'A2';
+        if (percentage >= 71) return 'B1';
+        if (percentage >= 61) return 'B2';
+        if (percentage >= 51) return 'C1';
+        if (percentage >= 41) return 'C2';
+        if (percentage >= 33) return 'D';
+        return 'E';
     },
 
     viewHomework(container, user) {
@@ -599,7 +671,7 @@ const StudentModule = {
                             ${isGraded ? `
                                 <div style="font-size: 0.75rem; color: var(--success); font-weight: 600;">
                                     Score: ${sub.score}/100 
-                                    <i class="fas fa-info-circle" style="cursor: pointer;" title="${sub.remarks}" onclick="alert('Teacher\\'s Feedback: ${sub.remarks}')"></i>
+                                    <i class="fas fa-info-circle" style="cursor: pointer;" title="${sub.remarks}" onclick="NotificationSystem.showToast('Teacher Feedback', 'Feedback: ${sub.remarks}', 'info')"></i>
                                 </div>
                             ` : ''}
                         </div>
@@ -656,7 +728,7 @@ const StudentModule = {
         const student = this.getStudentData(Auth.getCurrentUser());
 
         if (!content && (!fileInput.files || !fileInput.files[0])) {
-            return alert('Please provide some content or attach a file.');
+            return NotificationSystem.showToast('Input Error', 'Please provide some content or attach a file.', 'warning');
         }
 
         const submit = () => {
@@ -670,7 +742,7 @@ const StudentModule = {
             });
             Storage.save(STORAGE_KEYS.SUBMISSIONS, submissions);
             document.getElementById('sub-modal').remove();
-            alert('Homework submitted successfully!');
+            NotificationSystem.showToast('Success', 'Homework submitted successfully!', 'success');
             this.viewHomework(document.getElementById('content-area'), Auth.getCurrentUser());
         };
 
@@ -688,51 +760,126 @@ const StudentModule = {
 
     viewFees(container, user) {
         const student = this.getStudentData(user);
-        const structure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE);
+        const feeStructure = Storage.get(STORAGE_KEYS.FEE_STRUCTURE);
+        const classFee = (feeStructure && typeof feeStructure === 'object') ? (feeStructure[student.classId] || 0) : 0;
         const allPayments = Storage.get(STORAGE_KEYS.FEES);
         const studentPayments = allPayments.filter(p => p.studentId === student.id);
+        const totalPaid = studentPayments.reduce((sum, p) => sum + p.amount, 0);
+        const balance = classFee - totalPaid;
 
         container.innerHTML = `
             <div class="glass-panel" style="padding: 2rem;">
-                <div style="margin-bottom: 2rem;">
-                    <h2 style="margin: 0;">Exam Fee Payment Portals</h2>
-                    <p style="color: var(--gray-500); font-size: 0.875rem;">Session: 2025-26 | Student: ${student.name}</p>
+                <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h2 style="margin: 0;">School Fee Status</h2>
+                        <p style="color: var(--gray-500); font-size: 0.875rem;">Session: 2025-26 | Student: ${student.name}</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.75rem; color: var(--gray-400); text-transform: uppercase;">Total Balance</div>
+                        <h2 style="margin: 0; color: ${balance > 0 ? 'var(--danger)' : 'var(--success)'};">₹ ${balance}</h2>
+                    </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
-                    ${structure.map(exam => {
-            const payment = studentPayments.find(p => p.examName === exam.name);
-            const isPaid = !!payment;
-
-            return `
-                            <div class="glass-card" style="padding: 1.5rem; border-left: 4px solid ${isPaid ? 'var(--success)' : 'var(--danger)'}; position: relative;">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
-                                    <h4 style="margin: 0;">${exam.name}</h4>
-                                    <span class="badge" style="background: ${isPaid ? 'var(--success-light)' : '#fee2e2'}; color: ${isPaid ? 'var(--success)' : '#991b1b'};">
-                                        ${isPaid ? 'PAID' : 'PENDING'}
-                                    </span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem;">
-                                    <div>
-                                        <p style="font-size: 0.75rem; color: var(--gray-400); margin: 0;">Examination Fee</p>
-                                        <h3 style="margin: 0;">₹ ${exam.amount}</h3>
-                                    </div>
-                                    ${isPaid ? `
-                                        <div style="text-align: right;">
-                                            <p style="font-size: 0.7rem; color: var(--gray-400); margin: 0;">Receipt No: ${payment.id}</p>
-                                            <button class="btn" style="padding: 4px 8px; font-size: 0.75rem; color: var(--primary);" onclick="StudentModule.downloadReceipt('${payment.id}')">
-                                                <i class="fas fa-download"></i> Receipt
-                                            </button>
-                                        </div>
-                                    ` : `
-                                        <button class="btn btn-primary" onclick="StudentModule.payExamFee('${exam.name}', ${exam.amount})">
-                                            Pay Now
-                                        </button>
-                                    `}
-                                </div>
+                <div class="responsive-grid" style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 1.5rem;">
+                    <!-- Fee Summary Card -->
+                    <div class="glass-card" style="padding: 2rem; border-top: 5px solid var(--primary);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                            <h3 style="margin: 0;">Class-wise Fee Payment</h3>
+                            <span class="badge" style="background: ${balance <= 0 ? 'var(--success-light)' : '#fee2e2'}; color: ${balance <= 0 ? 'var(--success)' : '#991b1b'}; font-size: 0.8rem;">
+                                ${balance <= 0 ? 'FULLY PAID' : 'PENDING'}
+                            </span>
+                        </div>
+                        
+                        <div style="display: grid; gap: 1.5rem;">
+                            <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid var(--gray-100);">
+                                <span style="color: var(--gray-600);">Annual School Fee</span>
+                                <span style="font-weight: 700;">₹ ${classFee}</span>
                             </div>
-                        `;
-        }).join('')}
+                            <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid var(--gray-100);">
+                                <span style="color: var(--gray-600);">Total Paid to Date</span>
+                                <span style="font-weight: 700; color: var(--success);">₹ ${totalPaid}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 1.1rem; padding-top: 10px;">
+                                <span style="font-weight: 700;">Remaining Dues</span>
+                                <span style="font-weight: 800; color: ${balance > 0 ? 'var(--danger)' : 'var(--success)'};">₹ ${balance}</span>
+                            </div>
+                        </div>
+
+                        ${balance > 0 ? `
+                            <div style="margin-top: 2rem; background: var(--gray-50); padding: 1.5rem; border-radius: 12px; border: 1px dashed var(--gray-300);">
+                                <label class="form-label">Payment Amount</label>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <div style="flex: 1; position: relative;">
+                                        <span style="position: absolute; left: 12px; top: 11px; color: var(--gray-400);">₹</span>
+                                        <input type="number" id="manual-pay-amount" class="form-control" value="${balance}" max="${balance}" style="padding-left: 25px;">
+                                    </div>
+                                    <button class="btn btn-primary" onclick="StudentModule.payClassFee()">Pay Now</button>
+                                </div>
+                                <p style="font-size: 0.75rem; color: var(--gray-400); margin-top: 10px;"><i class="fas fa-info-circle"></i> You can pay the full amount or a partial installment.</p>
+                            </div>
+                        ` : `
+                            <div style="margin-top: 2rem; text-align: center; padding: 2rem; background: var(--success-light); border-radius: 12px; color: var(--success);">
+                                <i class="fas fa-check-circle fa-3x" style="margin-bottom: 1rem;"></i>
+                                <h4 style="margin: 0;">Fee Successfully Paid</h4>
+                                <p style="margin: 5px 0 0 0; font-size: 0.8125rem;">No pending dues for this session.</p>
+                            </div>
+                        `}
+                    </div>
+
+                    <!-- Payment Records -->
+                    <div class="glass-panel" style="padding: 1.5rem;">
+                        <h4 style="margin-top: 0; margin-bottom: 1.5rem;">Recent Receipts</h4>
+                        <div style="display: grid; gap: 10px;">
+                            ${studentPayments.reverse().map(p => `
+                                <div class="glass-card" style="padding: 1rem; font-size: 0.8125rem; display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-weight: 700;">#${p.id}</div>
+                                        <div style="color: var(--gray-500); font-size: 0.7rem;">${new Date(p.date).toLocaleDateString()}</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: 700; color: var(--success);">₹${p.amount}</div>
+                                        <button class="btn" style="padding: 0; font-size: 0.7rem; color: var(--primary);" onclick="StudentModule.downloadReceipt('${p.id}')">Download</button>
+                                    </div>
+                                </div>
+                            `).join('') || '<p style="color: var(--gray-400); text-align: center; font-size: 0.875rem;">No payments yet.</p>'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" style="margin-top: 3rem; background: var(--gray-50); border: 1px solid var(--gray-200); padding: 1.5rem;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem;">
+                        <i class="fas fa-university" style="color: var(--primary); font-size: 1.25rem;"></i>
+                        <h3 style="margin: 0;">Official School Payment Details</h3>
+                    </div>
+                    
+                    ${(() => {
+                const config = Storage.get(STORAGE_KEYS.PAYMENT_CONFIG) || {
+                    merchantName: 'School Management System',
+                    upiId: 'school@upi',
+                    bankName: 'Official School Bank',
+                    accountNumber: '9182736455',
+                    ifsc: 'EDUF0001234'
+                };
+                return `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+                            <div>
+                                <p style="font-size: 0.75rem; color: var(--gray-500); text-transform: uppercase; font-weight: 700; margin-bottom: 5px;">Bank Transfer</p>
+                                <p style="font-size: 0.875rem; margin: 2px 0;"><strong>Bank:</strong> ${config.bankName}</p>
+                                <p style="font-size: 0.875rem; margin: 2px 0;"><strong>A/C No:</strong> ${config.accountNumber}</p>
+                                <p style="font-size: 0.875rem; margin: 2px 0;"><strong>IFSC:</strong> ${config.ifsc}</p>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.75rem; color: var(--gray-500); text-transform: uppercase; font-weight: 700; margin-bottom: 5px;">UPI Payment</p>
+                                <p style="font-size: 1.1rem; font-weight: 700; color: var(--primary); margin: 0;">${config.upiId}</p>
+                                <p style="font-size: 0.75rem; color: var(--gray-400); margin-top: 5px;">Scan QR in payment portal for instant credit.</p>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.75rem; color: var(--gray-500); text-transform: uppercase; font-weight: 700; margin-bottom: 5px;">Security</p>
+                                <p style="font-size: 0.8125rem; color: var(--gray-600); line-height: 1.4;">Instant receipt generation on successful authorization. All transactions are SSL secured via Secure Gateway.</p>
+                            </div>
+                        </div>
+                    `;
+            })()}
                 </div>
             </div>
         `;
@@ -741,34 +888,33 @@ const StudentModule = {
     downloadReceipt(receiptId) {
         const payments = Storage.get(STORAGE_KEYS.FEES);
         const p = payments.find(pay => pay.id === receiptId);
-        if (!p) return alert('Receipt not found.');
+        if (!p) return NotificationSystem.showToast('Error', 'Receipt not found.', 'error');
 
         const user = Auth.getCurrentUser();
         const student = this.getStudentData(user);
 
         const receiptContent = `
-========================================
-       EDUFLOW SCHOOL MANAGEMENT
+==========================================
+        SCHOOL MANAGEMENT SYSTEM
             OFFICIAL RECEIPT
-========================================
+==========================================
 Receipt ID: ${p.id}
 Date:       ${new Date(p.date).toLocaleString()}
-----------------------------------------
+------------------------------------------
 Student Name:  ${student.name}
 Admission No:  ${student.admissionNo}
-Class:         ${student.className} - ${student.section}
-----------------------------------------
+------------------------------------------
 DESCRIPTION                    AMOUNT
-----------------------------------------
-${p.examName.padEnd(30)} ₹${p.amount.toString().padStart(8)}
-----------------------------------------
+------------------------------------------
+${(p.description || 'School Fee').padEnd(30)} ₹${p.amount.toString().padStart(8)}
+------------------------------------------
 TOTAL PAID:                   ₹${p.amount.toString().padStart(8)}
-----------------------------------------
+------------------------------------------
 Payment Method: ${p.method}
-Status:         FULLY PAID
-========================================
-       Thank you for your payment!
-========================================
+Status:         COMPLETED
+==========================================
+        Thank you for your payment!
+==========================================
         `;
 
         const blob = new Blob([receiptContent], { type: 'text/plain' });
@@ -782,24 +928,160 @@ Status:         FULLY PAID
         document.body.removeChild(a);
     },
 
-    payExamFee(examName, amount) {
-        const user = Auth.getCurrentUser();
-        const student = this.getStudentData(user);
+    payClassFee() {
+        const amount = parseInt(document.getElementById('manual-pay-amount').value);
+        if (!amount || amount <= 0) return NotificationSystem.showToast('Invalid Amount', 'Please enter a valid amount to pay.', 'warning');
 
-        if (confirm(`Proceed to pay ₹${amount} for ${examName}?`)) {
-            const allPayments = Storage.get(STORAGE_KEYS.FEES);
-            allPayments.push({
-                id: 'REC' + Date.now().toString(36).toUpperCase(),
-                studentId: student.id,
-                examName,
-                amount,
-                date: new Date().toISOString(),
-                method: 'Mock Payment'
-            });
-            Storage.save(STORAGE_KEYS.FEES, allPayments);
-            alert('Payment successful!');
-            this.viewFees(document.getElementById('content-area'), user);
-        }
+        const user = Auth.getCurrentUser();
+        const config = Storage.get(STORAGE_KEYS.PAYMENT_CONFIG) || {
+            merchantName: 'School Management System',
+            upiId: 'school@upi',
+            bankName: 'Official School Bank',
+            accountNumber: '9182736455',
+            ifsc: 'SMS0001234'
+        };
+
+        const modalContent = `
+            <div style="max-height: 80vh; overflow-y: auto; padding: 10px;">
+                <div class="glass-panel" style="background: var(--primary-light); border: 1px solid var(--primary); padding: 1rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <p style="font-size: 0.75rem; color: var(--primary); font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: 1px;">Order Summary</p>
+                        <h3 style="margin: 0; color: var(--gray-900);">Class-wise School Fee</h3>
+                    </div>
+                    <h2 style="margin: 0; color: var(--primary);">₹ ${amount}</h2>
+                </div>
+
+                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; background: var(--gray-50); padding: 5px; border-radius: 12px;">
+                    <button class="btn payment-tab active" id="tab-upi" onclick="StudentModule.switchPaymentTab('upi')" style="flex: 1; padding: 10px; font-weight: 600;">UPI</button>
+                    <button class="btn payment-tab" id="tab-card" onclick="StudentModule.switchPaymentTab('card')" style="flex: 1; padding: 10px; font-weight: 600;">Card</button>
+                    <button class="btn payment-tab" id="tab-bank" onclick="StudentModule.switchPaymentTab('bank')" style="flex: 1; padding: 10px; font-weight: 600;">Bank</button>
+                </div>
+
+                <!-- UPI Section -->
+                <div id="section-upi" class="payment-section active">
+                    <div style="text-align: center; padding: 2rem 0;">
+                        <i class="fas fa-mobile-alt fa-3x" style="color: var(--primary); margin-bottom: 1rem;"></i>
+                        <p style="font-size: 0.875rem; color: var(--gray-600); margin-bottom: 1.5rem;">Pay using any UPI app (GPay, PhonePe, Paytm)</p>
+                        
+                        <div class="form-group" style="max-width: 300px; margin: 0 auto 1.5rem;">
+                            <label class="form-label" style="text-align: left;">Enter your UPI ID</label>
+                            <input type="text" id="upi-id" class="form-control" placeholder="username@bank" style="text-align: center;">
+                        </div>
+                        
+                        <div style="padding: 1rem; border: 2px dashed var(--gray-200); border-radius: 12px; margin-bottom: 1.5rem; display: inline-block;">
+                            <p style="font-size: 0.75rem; color: var(--gray-400); margin-bottom: 5px;">Scan QR to pay directly</p>
+                            <div style="width: 150px; height: 150px; background: #eee; margin: 0 auto; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                                <i class="fas fa-qrcode fa-5x" style="color: #333;"></i>
+                            </div>
+                            <p style="font-size: 0.875rem; font-weight: 700; margin-top: 10px; color: var(--primary);">${config.upiId}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card Section -->
+                <div id="section-card" class="payment-section" style="display: none;">
+                    <div style="padding: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">Card Number</label>
+                            <div style="position: relative;">
+                                <input type="text" class="form-control" placeholder="XXXX XXXX XXXX XXXX" maxlength="19">
+                                <i class="fab fa-cc-visa" style="position: absolute; right: 10px; top: 12px; color: #1a1f71;"></i>
+                            </div>
+                        </div>
+                        <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Expiry Date</label>
+                                <input type="text" class="form-control" placeholder="MM/YY" maxlength="5">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">CVV</label>
+                                <input type="password" class="form-control" placeholder="***" maxlength="3">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Card Holder Name</label>
+                            <input type="text" class="form-control" placeholder="As shown on card">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bank Section -->
+                <div id="section-bank" class="payment-section" style="display: none;">
+                    <div style="padding: 1rem; background: var(--gray-50); border-radius: 12px;">
+                        <h4 style="margin-top: 0; color: var(--primary);"><i class="fas fa-university"></i> Direct Bank Transfer</h4>
+                        <p style="font-size: 0.8125rem; color: var(--gray-600); margin-bottom: 1.5rem;">Transfer the amount to the school account and enter the Transaction Ref ID below.</p>
+                        
+                        <div style="display: grid; gap: 1rem; font-size: 0.875rem; border: 1px solid var(--gray-200); padding: 1rem; border-radius: 8px; background: white;">
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--gray-500);">Receiver:</span> <strong style="color: var(--gray-900);">${config.merchantName}</strong></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--gray-500);">Bank:</span> <strong style="color: var(--gray-900);">${config.bankName}</strong></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--gray-500);">Account No:</span> <strong style="color: var(--gray-900);">${config.accountNumber}</strong></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--gray-500);">IFSC Code:</span> <strong style="color: var(--gray-900);">${config.ifsc}</strong></div>
+                        </div>
+                        
+                        <div class="form-group" style="margin-top: 1.5rem;">
+                            <label class="form-label">Transaction Reference (UTR) No.</label>
+                            <input type="text" id="bank-ref" class="form-control" placeholder="e.g., 214536789012">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 2rem; border-top: 1px solid var(--gray-100); padding-top: 1.5rem; text-align: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--gray-400); font-size: 0.75rem; margin-bottom: 1rem;">
+                        <i class="fas fa-shield-alt"></i> 256-Bit SSL Secure Encryption
+                    </div>
+                    <button class="btn btn-primary" id="final-pay-btn" onclick="StudentModule.processPayment(${amount})" style="width: 100%; height: 50px; font-size: 1.1rem; font-weight: 700; background: linear-gradient(to right, var(--primary), #8b5cf6);">
+                        Authorize Payment ₹ ${amount}
+                    </button>
+                </div>
+            </div>
+        `;
+
+        AdminModule.showModal(`<i class="fas fa-lock" style="color: #059669; margin-right: 8px;"></i> Secure Gateway`, modalContent);
+    },
+
+    switchPaymentTab(tabId) {
+        // Toggle tabs
+        document.querySelectorAll('.payment-tab').forEach(el => el.classList.remove('active', 'btn-primary'));
+        document.getElementById(`tab-${tabId}`).classList.add('active', 'btn-primary');
+
+        // Toggle sections
+        document.querySelectorAll('.payment-section').forEach(el => el.style.display = 'none');
+        document.getElementById(`section-${tabId}`).style.display = 'block';
+    },
+
+    processPayment(amount) {
+        const btn = document.getElementById('final-pay-btn');
+        const originalText = btn.innerHTML;
+
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Securing Connection...`;
+
+        setTimeout(() => {
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Authorizing with Bank...`;
+
+            setTimeout(() => {
+                const user = Auth.getCurrentUser();
+                const student = this.getStudentData(user);
+                const allPayments = Storage.get(STORAGE_KEYS.FEES);
+
+                // Get selected method
+                const activeTab = document.querySelector('.payment-tab.active').id.replace('tab-', '').toUpperCase();
+
+                allPayments.push({
+                    id: 'REC' + Date.now().toString(36).toUpperCase(),
+                    studentId: student.id,
+                    description: 'School Fee Payment',
+                    amount,
+                    date: new Date().toISOString(),
+                    method: activeTab // Card, UPI, or Bank
+                });
+
+                Storage.save(STORAGE_KEYS.FEES, allPayments);
+                AdminModule.closeModal();
+                NotificationSystem.showToast('Payment Successful', `Receipt generated for your payment of ₹${amount}.`, 'success');
+                this.viewFees(document.getElementById('content-area'), user);
+            }, 2000);
+        }, 1500);
     },
 
     viewNotices(container, user) {
@@ -961,11 +1243,9 @@ Status:         FULLY PAID
 
     applyReportFilters() {
         const selectedExam = document.getElementById('filter-exam').value;
-        const selectedSubject = document.getElementById('filter-subject').value;
 
         // Save to session
         sessionStorage.setItem('reportFilterExam', selectedExam);
-        sessionStorage.setItem('reportFilterSubject', selectedSubject);
 
         // Reload report card
         const user = Auth.getCurrentUser();
