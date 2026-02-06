@@ -7,9 +7,16 @@ const DemoData = {
     init() {
         console.log('Initializing demo data...');
 
-        // 1. Define Classes (Pre-KG to 12th, Sections A-D)
-        const gradeNames = ['Pre-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
-        const sections = ['A', 'B', 'C', 'D'];
+        // 1. Define Classes (Pre-KG to 12th with Streams)
+        const gradeNames = [
+            'Pre-KG', 'LKG', 'UKG',
+            '1st', '2nd', '3rd', '4th', '5th',
+            '6th', '7th', '8th',
+            '9th', '10th',
+            '11th Science (PCM)', '11th Science (PCB)', '11th Science (PCMB)', '11th Commerce', '11th Humanities',
+            '12th Science (PCM)', '12th Science (PCB)', '12th Science (PCMB)', '12th Commerce', '12th Humanities'
+        ];
+        const sections = ['A', 'B']; // Reduced sections to keep data size manageable
         const classes = [];
         let classIdCounter = 1;
 
@@ -19,55 +26,81 @@ const DemoData = {
                     id: `c${classIdCounter}`,
                     name: grade,
                     section: section,
-                    room: `${gradeIndex + 1}0${section.charCodeAt(0) - 64}` // e.g., 101, 102, 103, 104
+                    room: `${Math.floor(gradeIndex / 2) + 1}0${section.charCodeAt(0) - 64}`
                 });
                 classIdCounter++;
             });
         });
         Storage.save(STORAGE_KEYS.CLASSES, classes);
 
-        // 2. Define Subjects
-        const subjects = [
-            { id: 'sub1', name: 'Mathematics', code: 'MATH' },
-            { id: 'sub2', name: 'Science', code: 'SCI' },
-            { id: 'sub3', name: 'English', code: 'ENG' },
-            { id: 'sub4', name: 'Social Studies', code: 'SST' },
-            { id: 'sub5', name: 'Hindi', code: 'HIN' },
-            { id: 'sub6', name: 'Computer Science', code: 'CS' },
-            { id: 'sub7', name: 'Physical Education', code: 'PE' },
-            { id: 'sub8', name: 'Art & Craft', code: 'ART' }
-        ];
+        // 2. Define Subjects from Curriculum
+        const allUniqueSubjects = new Set();
+        for (const level in SCHOOL_CURRICULUM) {
+            for (const grade in SCHOOL_CURRICULUM[level]) {
+                SCHOOL_CURRICULUM[level][grade].forEach(s => allUniqueSubjects.add(s));
+            }
+        }
+        const subjects = Array.from(allUniqueSubjects).map((name, i) => ({
+            id: `sub${i + 1}`,
+            name: name,
+            code: name.split(' ')[0].substring(0, 4).toUpperCase()
+        }));
         Storage.save(STORAGE_KEYS.SUBJECTS, subjects);
 
-        // 3. Define Teachers (1 per class = 60 teachers)
+        // 3. Define Teachers (Extensive Pool)
         const teacherNames = [
             'Rajesh Kumar', 'Priya Sharma', 'Amit Patel', 'Sneha Gupta', 'Vikram Singh', 'Anjali Verma',
             'Rahul Mehta', 'Kavita Reddy', 'Suresh Nair', 'Pooja Iyer', 'Manoj Joshi', 'Deepa Rao',
             'Arun Kumar', 'Meera Desai', 'Sanjay Pillai', 'Rekha Menon', 'Karthik Bhat', 'Swati Kulkarni',
             'Ramesh Agarwal', 'Nisha Kapoor', 'Ashok Pandey', 'Geeta Mishra', 'Vinod Tiwari', 'Sunita Jain',
-            'Prakash Yadav', 'Ritu Saxena', 'Dinesh Chauhan', 'Lalita Sinha', 'Harish Dubey', 'Madhuri Trivedi'
+            'Prakash Yadav', 'Ritu Saxena', 'Dinesh Chauhan', 'Lalita Sinha', 'Harish Dubey', 'Madhuri Trivedi',
+            'Abhishek Das', 'Tanuja Nair', 'Siddharth Roy', 'Pallavi Ghosh', 'Sameer Kulkarni', 'Neha Shrivastava',
+            'Rakesh Varma', 'Shilpa Shetty', 'Manish Pandey', 'Divya Bharti', 'Arjun Rampal', 'Kriti Sanon',
+            'Varun Dhawan', 'Alia Bhatt', 'Ranbir Kapoor', 'Deepika Padukone', 'Shah Rukh Khan', 'Priyanka Chopra'
         ];
-        const subjectPool = subjects.map(s => s.name);
+
         const teachers = [];
+        let teacherCounter = 1;
 
-        classes.forEach((cls, index) => {
-            const teacherName = teacherNames[index % teacherNames.length] + ` ${Math.floor(index / teacherNames.length) + 1}`;
-            const subject = subjectPool[index % subjectPool.length];
-
+        // Ensure every subject in the entire school has at least one specialist teacher
+        const subjectsList = Array.from(allUniqueSubjects);
+        subjectsList.forEach((subjectName, i) => {
+            const name = teacherNames[i % teacherNames.length];
             teachers.push({
-                id: `t${index + 1}`,
-                name: teacherName,
-                employeeId: `EMP${String(index + 1).padStart(3, '0')}`,
-                subject: subject,
-                mobile: `98765${String(43210 + index).slice(-5)}`,
-                username: `teacher${index + 1}`,
+                id: `t${teacherCounter}`,
+                name: name,
+                employeeId: `EMP${String(teacherCounter).padStart(3, '0')}`,
+                subject: subjectName,
+                mobile: `98765${String(43210 + teacherCounter).slice(-5)}`,
+                username: `teacher${teacherCounter}`,
                 password: '123',
-                assignedClassIds: [cls.id],
+                assignedClassIds: [], // Will be populated next
                 permissions: ['markAttendance', 'manageHomework', 'enterMarks', 'manageStudents', 'manageNotices'],
                 createdAt: new Date().toISOString()
             });
+            teacherCounter++;
         });
+
+        // Now assign these teachers to classes they teach in
+        classes.forEach(cls => {
+            const classSubjects = getSubjectsByGrade(cls.name);
+            classSubjects.forEach(subName => {
+                // Find a teacher who teaches this subject
+                const teacher = teachers.find(t => t.subject === subName);
+                if (teacher && !teacher.assignedClassIds.includes(cls.id)) {
+                    teacher.assignedClassIds.push(cls.id);
+                }
+            });
+
+            // Assign a class teacher (randomly from the teachers assigned to this class)
+            const classStaff = teachers.filter(t => t.assignedClassIds.includes(cls.id));
+            if (classStaff.length > 0) {
+                cls.classTeacher = classStaff[Math.floor(Math.random() * classStaff.length)].name;
+            }
+        });
+
         Storage.save(STORAGE_KEYS.TEACHERS, teachers);
+        Storage.save(STORAGE_KEYS.CLASSES, classes); // Save classes again to include classTeacher info
 
         // 4. Define Students (20 per class = 1,200 students)
         const firstNames = [
@@ -113,7 +146,7 @@ const DemoData = {
 
         // 5. Update Users Table (Sync for authentication)
         const users = [
-            { username: 'admin@eduflow.com', password: '123', role: 'admin', name: 'System Administrator' },
+            { username: 'admin@smsportal.com', password: '123', role: 'admin', name: 'System Administrator' },
             ...teachers.map(t => ({ username: t.username, password: t.password, role: 'teacher', name: t.name })),
             ...students.map(s => ({ username: s.username, password: s.password, role: 'student', name: s.name, classId: s.classId }))
         ];
@@ -165,20 +198,27 @@ const DemoData = {
 
         // 9. Define Notices
         const notices = [
-            { id: 'n1', title: 'Annual Sports Day 2026', content: 'We are excited to announce our Annual Sports Day on Feb 15th. All students must participate in at least one event.', author: 'Principal Office', date: '2026-01-20', createdAt: new Date().toISOString() },
-            { id: 'n2', title: 'Half Yearly Result Declaration', content: 'Half Yearly Exam results will be declared this Friday at 10:00 AM in respective classrooms.', author: 'Examination Cell', date: '2026-01-22', createdAt: new Date().toISOString() },
-            { id: 'n3', title: 'Science Fair Registration', content: 'Registration for the Science Fair is now open. Interested students from classes 10-12 can register in the lab.', author: 'Science HOD', date: '2026-01-21', createdAt: new Date().toISOString() },
-            { id: 'n4', title: 'Holiday Declaration', content: 'The school will remain closed this Saturday for teacher training workshops.', author: 'Admin Office', date: '2026-01-22', createdAt: new Date().toISOString() }
+            { id: 'n1', title: 'New Curriculum Integrated', content: 'We have successfully updated our academic curriculum from Pre-KG to Grade 12. Check your classroom for the updated list of subjects.', author: 'Academic Dean', date: '2026-02-05', createdAt: new Date().toISOString() },
+            { id: 'n2', title: 'Annual Sports Day 2026', content: 'We are excited to announce our Annual Sports Day on Feb 15th. All students must participate in at least one event.', author: 'Principal Office', date: '2026-01-20', createdAt: new Date().toISOString() },
+            { id: 'n3', title: 'Half Yearly Result Declaration', content: 'Half Yearly Exam results will be declared this Friday at 10:00 AM in respective classrooms.', author: 'Examination Cell', date: '2026-01-22', createdAt: new Date().toISOString() },
+            { id: 'n4', title: 'Science Fair Registration', content: 'Registration for the Science Fair is now open. Interested students from classes 10-12 can register in the lab.', author: 'Science HOD', date: '2026-01-21', createdAt: new Date().toISOString() }
         ];
         Storage.save(STORAGE_KEYS.NOTICES, notices);
 
         // 10. Define Homework
-        const homework = [
-            { id: 'hw1', classId: 'c1', subject: 'Mathematics', title: 'Quadratic Equations Exercise', description: 'Complete Exercise 4.2 and 4.3 from NCERT textbook.', dueDate: '2026-01-25', createdAt: new Date().toISOString() },
-            { id: 'hw2', classId: 'c1', subject: 'Physics', title: 'Optics Lab Report', description: 'Submit the lab report for the refraction experiment performed yesterday.', dueDate: '2026-01-24', createdAt: new Date().toISOString() },
-            { id: 'hw3', classId: 'c2', subject: 'English', title: 'Shakespeare Essay', description: 'Write a 500-word essay on the themes of Macbeth.', dueDate: '2026-01-26', createdAt: new Date().toISOString() },
-            { id: 'hw4', classId: 'c3', subject: 'Computer Sci', title: 'Data Structures Project', description: 'Implement a basic linked list in JavaScript.', dueDate: '2026-01-28', createdAt: new Date().toISOString() }
-        ];
+        const homework = [];
+        classes.slice(0, 10).forEach((cls, i) => {
+            const classSubjects = getSubjectsByGrade(cls.name);
+            homework.push({
+                id: `hw${i + 1}`,
+                classId: cls.id,
+                subject: classSubjects[0],
+                title: `${classSubjects[0]} Weekly Assignment`,
+                description: `Please complete the practice exercises from Chapter ${i + 1} and submit by the due date.`,
+                dueDate: '2026-02-15',
+                createdAt: new Date().toISOString()
+            });
+        });
         Storage.save(STORAGE_KEYS.HOMEWORK, homework);
 
         // 11. Define Attendance History (Dynamic for Current Month)
@@ -206,17 +246,36 @@ const DemoData = {
         Storage.save(STORAGE_KEYS.ATTENDANCE, attendance);
 
         // 12. Define Marks/Report Card Data
-        const marks = [
-            { id: 'm1', examId: 'Unit Test I', classId: 'c1', subjectId: 'Mathematics', data: { 's1': '18', 's2': '19' }, createdAt: new Date().toISOString() },
-            { id: 'm2', examId: 'Unit Test I', classId: 'c1', subjectId: 'Physics', data: { 's1': '17', 's2': '18' }, createdAt: new Date().toISOString() },
-            { id: 'm3', examId: 'Quarterly Exam', classId: 'c1', subjectId: 'Mathematics', data: { 's1': '85', 's2': '92' }, createdAt: new Date().toISOString() },
-            { id: 'm4', examId: 'Quarterly Exam', classId: 'c1', subjectId: 'Physics', data: { 's1': '78', 's2': '88' }, createdAt: new Date().toISOString() },
-            { id: 'm5', examId: 'Annual Exam', classId: 'c1', subjectId: 'Mathematics', data: { 's1': '92', 's2': '95' }, createdAt: new Date().toISOString() },
-            { id: 'm6', examId: 'Annual Exam', classId: 'c1', subjectId: 'Physics', data: { 's1': '88', 's2': '91' }, createdAt: new Date().toISOString() },
-            // Add marks for other students
-            { id: 'm7', examId: 'Unit Test I', classId: 'c2', subjectId: 'English', data: { 's3': '15', 's4': '19' }, createdAt: new Date().toISOString() },
-            { id: 'm8', examId: 'Annual Exam', classId: 'c2', subjectId: 'English', data: { 's3': '75', 's4': '92' }, createdAt: new Date().toISOString() }
-        ];
+        const marks = [];
+        let markIdCounter = 1;
+
+        // Generate marks for some students to show data
+        const sampleClasses = classes.slice(0, 10);
+        const examTypesList = ['Unit Test I', 'Quarterly Exam', 'Annual Exam'];
+
+        sampleClasses.forEach(cls => {
+            const classSubjects = getSubjectsByGrade(cls.name);
+            const classStudents = students.filter(s => s.classId === cls.id);
+
+            examTypesList.forEach(exam => {
+                classSubjects.slice(0, 5).forEach(subject => {
+                    const markData = {};
+                    classStudents.forEach(stu => {
+                        const max = (exam.includes('Unit')) ? 20 : 100;
+                        markData[stu.id] = (Math.floor(Math.random() * (max * 0.4)) + (max * 0.6)).toString();
+                    });
+
+                    marks.push({
+                        id: `m${markIdCounter++}`,
+                        examId: exam,
+                        classId: cls.id,
+                        subjectId: subject,
+                        data: markData,
+                        createdAt: new Date().toISOString()
+                    });
+                });
+            });
+        });
         Storage.save(STORAGE_KEYS.MARKS, marks);
 
         // 13. Define Exam Types
