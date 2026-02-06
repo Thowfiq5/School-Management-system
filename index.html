@@ -4,12 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - EduFlow SMS</title>
+    <title>Dashboard - School Management System</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .nav-item {
             display: flex;
@@ -104,11 +105,15 @@
 </head>
 
 <body>
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
     <div class="app-container">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header" style="margin-bottom: 2rem;">
-                <h2 style="color: white; font-size: 1.5rem;"><i class="fas fa-graduation-cap"></i> EduFlow</h2>
+                <h2
+                    style="color: white; font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-graduation-cap"></i> School Management System
+                </h2>
             </div>
 
             <nav id="sidebar-nav">
@@ -133,27 +138,31 @@
         <!-- Main Content -->
         <main class="main-content">
             <header class="top-bar">
-                <div>
-                    <h1 id="page-title">Dashboard</h1>
-                    <p id="academic-session"
-                        style="font-size: 0.75rem; color: var(--primary); font-weight: 600; margin-top: -4px;">Session:
-                        2025-26</p>
-                </div>
-                <div class="top-bar-actions" style="text-align: right; display: flex; align-items: center; gap: 2rem;">
-                    <div style="text-align: right;">
-                        <span id="current-day"
-                            style="display: block; font-weight: 600; color: var(--gray-900); font-size: 0.875rem;"></span>
-                        <span id="current-date" style="color: var(--gray-500); font-size: 0.75rem;"></span>
+                <div style="display: flex; align-items: center;">
+                    <button class="menu-toggle" onclick="toggleSidebar()" id="sidebar-toggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <div>
+                        <h1 id="page-title">Dashboard</h1>
+                        <p id="academic-session"
+                            style="font-size: 0.75rem; color: var(--primary); font-weight: 600; margin-top: -4px;">
+                            Session:
+                            2025-26</p>
                     </div>
-                    <!-- Notification Bell -->
-                    <button id="notification-bell" 
-                        onclick="NotificationSystem.showNotificationBell()"
-                        style="background: none; border: none; font-size: 1.5rem; color: var(--primary); cursor: pointer; position: relative; padding: 0.5rem; transition: all 0.2s; border-radius: 8px;"
-                        onmouseover="this.style.background = 'rgba(99, 102, 241, 0.1)'"
-                        onmouseout="this.style.background = 'none'">
-                        <i class="fas fa-bell"></i>
-                        <span id="notification-badge" 
-                            style="
+                    <div class="top-bar-actions"
+                        style="text-align: right; display: flex; align-items: center; gap: 2rem;">
+                        <div style="text-align: right;">
+                            <span id="current-day"
+                                style="display: block; font-weight: 600; color: var(--gray-900); font-size: 0.875rem;"></span>
+                            <span id="current-date" style="color: var(--gray-500); font-size: 0.75rem;"></span>
+                        </div>
+                        <!-- Notification Bell -->
+                        <button id="notification-bell" onclick="NotificationSystem.showNotificationBell()"
+                            style="background: none; border: none; font-size: 1.5rem; color: var(--primary); cursor: pointer; position: relative; padding: 0.5rem; transition: all 0.2s; border-radius: 8px;"
+                            onmouseover="this.style.background = 'rgba(99, 102, 241, 0.1)'"
+                            onmouseout="this.style.background = 'none'">
+                            <i class="fas fa-bell"></i>
+                            <span id="notification-badge" style="
                                 position: absolute;
                                 top: 0;
                                 right: 0;
@@ -168,8 +177,8 @@
                                 font-size: 0.75rem;
                                 font-weight: bold;
                             "></span>
-                    </button>
-                </div>
+                        </button>
+                    </div>
             </header>
 
             <div id="content-area">
@@ -186,6 +195,7 @@
     <script src="js/storage.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/demo_data.js"></script>
+    <script src="js/curriculum_data.js"></script>
     <script src="js/modules/notifications.js"></script>
     <script src="js/modules/admin.js?v=1.1"></script>
     <script src="js/modules/teacher.js?v=1.1"></script>
@@ -193,51 +203,45 @@
 
     <script>
         // Check authentication
-        if (!Auth.isAuthenticated()) {
-            window.location.href = 'login.html';
-        }
+        (async () => {
+            await Auth.init();
+            if (!Auth.isAuthenticated()) {
+                window.location.href = 'login.html';
+                return;
+            }
 
-        const user = Auth.getCurrentUser();
+            const user = Auth.getCurrentUser();
+            window.user = user; // Global reference for modules
 
-        // Initialize Dashboard
-        document.addEventListener('DOMContentLoaded', () => {
-            // Initialize demo data if system is empty or s1 is missing
-            // Initialize demo data with version check to ensure new fields (Attendance, Marks) are populated
-            const DEMO_VERSION = '3.0'; // Increment to force reload
+            // Initialize demo data with version check
+            const DEMO_VERSION = '6.0';
             if (localStorage.getItem('demo_data_version') !== DEMO_VERSION) {
-                console.log('New demo data version detected. Re-initializing...');
                 DemoData.init();
                 localStorage.setItem('demo_data_version', DEMO_VERSION);
-            } else {
-                // Fallback: If critical data missing, load anyway
-                const currentStudents = Storage.get(STORAGE_KEYS.STUDENTS);
-                if (currentStudents.length === 0) {
-                    DemoData.init();
-                }
+                await Auth.init(); // Re-hash if demo data added plaintext
             }
 
-            setupUserInfo();
-            renderSidebar();
-
-            // Auto-select class for demo student
-            if (user.role === 'student' && !sessionStorage.getItem('selectedClassId')) {
-                const s = Storage.get(STORAGE_KEYS.STUDENTS).find(st => st.admissionNo === user.username);
-                if (s && s.classId) sessionStorage.setItem('selectedClassId', s.classId);
-            }
+            setupUserInfo(user);
+            renderSidebar(user);
 
             loadDefaultModule();
 
             // Set date
             const days = { weekday: 'long' };
             const fullDate = { year: 'numeric', month: 'long', day: 'numeric' };
-            document.getElementById('current-day').textContent = new Date().toLocaleDateString('en-IN', days);
-            document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-IN', fullDate);
-        });
+            if (document.getElementById('current-day'))
+                document.getElementById('current-day').textContent = new Date().toLocaleDateString('en-IN', days);
+            if (document.getElementById('current-date'))
+                document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-IN', fullDate);
+        })();
 
-        function setupUserInfo() {
-            document.getElementById('user-display-name').textContent = user.name;
-            document.getElementById('user-display-role').textContent = user.role;
-            document.getElementById('user-avatar-initial').textContent = user.name.charAt(0);
+        function setupUserInfo(user) {
+            if (document.getElementById('user-display-name'))
+                document.getElementById('user-display-name').textContent = user.name;
+            if (document.getElementById('user-display-role'))
+                document.getElementById('user-display-role').textContent = user.role;
+            if (document.getElementById('user-avatar-initial'))
+                document.getElementById('user-avatar-initial').textContent = user.name.charAt(0);
         }
 
         const NAV_CONFIG = {
@@ -250,6 +254,7 @@
                 { id: 'fee-structure', title: 'Fees Setup', icon: 'fas fa-money-bill-wave', module: 'manageFees' },
                 { id: 'exam-categories', title: 'Exam Categories', icon: 'fas fa-clipboard-list', module: 'manageExamTypes' },
                 { id: 'exam-marks', title: 'Exam Marks', icon: 'fas fa-file-invoice', module: 'manageExamMarks' },
+                { id: 'bulk-marksheets', title: 'Bulk Marksheets', icon: 'fas fa-file-pdf', module: 'manageMarksheets' },
                 { id: 'att-reports', title: 'Attendance Analytics', icon: 'fas fa-chart-line', module: 'manageAttendance' },
                 { id: 'notifications', title: 'Notifications', icon: 'fas fa-bell', module: 'manageNotifications' },
                 { id: 'db-manager', title: 'Database Manager', icon: 'fas fa-database', module: 'manageStorage' }
@@ -259,6 +264,7 @@
                 { id: 'teacher-dash', title: 'Classroom Dashboard', icon: 'fas fa-tachometer-alt', module: 'teacherDashboard' },
                 { id: 'mark-attendance', title: 'Attendance', icon: 'fas fa-calendar-check', module: 'markAttendance' },
                 { id: 'enter-marks', title: 'Exam Marks', icon: 'fas fa-file-invoice', module: 'enterMarks' },
+                { id: 'bulk-marksheets', title: 'Bulk Marksheets', icon: 'fas fa-file-pdf', module: 'manageMarksheets' },
                 { id: 'homework', title: 'Homework', icon: 'fas fa-book-open', module: 'manageHomework' },
                 { id: 'check-homework', title: 'Check Homework', icon: 'fas fa-check-circle', module: 'checkHomeworkStatus' },
                 { id: 'manage-students', title: 'My Students', icon: 'fas fa-user-graduate', module: 'manageStudents' },
@@ -276,6 +282,7 @@
         };
 
         function renderSidebar() {
+            const user = window.user;
             const nav = document.getElementById('sidebar-nav');
             let items = NAV_CONFIG[user.role] || [];
 
@@ -297,11 +304,17 @@
         }
 
         function loadModule(moduleName, navId, title) {
+            const user = window.user;
             // Update UI
             document.getElementById('page-title').textContent = title;
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             const activeNav = document.getElementById(`nav-${navId}`);
             if (activeNav) activeNav.classList.add('active');
+
+            // Auto-close sidebar on mobile after selection
+            if (window.innerWidth <= 768) {
+                toggleSidebar(false);
+            }
 
             const contentArea = document.getElementById('content-area');
 
@@ -343,8 +356,9 @@
         }
 
         function loadDefaultModule() {
+            const user = window.user;
             let items = NAV_CONFIG[user.role];
-            
+
             // For teachers: Only show "My Profile" if no class is selected
             if (user.role === 'teacher') {
                 const hasSelectedClass = sessionStorage.getItem('selectedTeacherClassId');
@@ -352,9 +366,25 @@
                     items = items.filter(item => item.id === 'my-profile');
                 }
             }
-            
+
             if (items && items.length > 0) {
                 loadModule(items[0].module, items[0].id, items[0].title);
+            }
+        }
+
+        function toggleSidebar(force) {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            const isActive = force !== undefined ? force : !sidebar.classList.contains('active');
+
+            if (isActive) {
+                sidebar.classList.add('active');
+                overlay.style.display = 'block';
+                document.body.style.overflow = 'hidden'; // Prevent background scroll
+            } else {
+                sidebar.classList.remove('active');
+                overlay.style.display = 'none';
+                document.body.style.overflow = 'auto';
             }
         }
     </script>
