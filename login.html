@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduFlow - Secure Access</title>
+    <title>Secure Access - School Management System</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -64,6 +64,30 @@
             box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.5);
             transform: translateY(0);
             transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 1.5rem;
+                border-radius: 20px;
+                max-width: 95%;
+            }
+
+            .login-header h1 {
+                font-size: 1.75rem;
+            }
+
+            .role-grid {
+                gap: 8px;
+            }
+
+            .role-option {
+                padding: 0.75rem 0.5rem;
+            }
+
+            .role-option span {
+                font-size: 0.65rem;
+            }
         }
 
         .login-header {
@@ -283,7 +307,7 @@
 <body>
     <div class="login-card">
         <div class="login-header">
-            <h1 id="app-title" style="cursor: pointer; user-select: none;">EduFlow</h1>
+            <h1 id="app-title" style="cursor: pointer; user-select: none; font-size: 2.25rem;">SMS Portal</h1>
             <p>Select your role and sign in</p>
         </div>
 
@@ -310,9 +334,9 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label">Username</label>
+                <label class="form-label" id="username-label">Username</label>
                 <div class="input-box">
-                    <input type="text" id="username" class="form-control" placeholder="Identity UID" required>
+                    <input type="text" id="username" class="form-control" placeholder="Email or Identity UID" required>
                     <i class="fas fa-id-card"></i>
                 </div>
             </div>
@@ -324,6 +348,12 @@
                     <i class="fas fa-key"></i>
                     <i class="fas fa-eye toggle-password" id="toggle-password" onclick="togglePasswordVisibility()"></i>
                 </div>
+            </div>
+
+            <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: -0.5rem;">
+                <input type="checkbox" id="remember-me" style="width: 16px; height: 16px; cursor: pointer;">
+                <label for="remember-me" style="font-size: 0.875rem; color: var(--gray-500); cursor: pointer;">Remember
+                    me on this device</label>
             </div>
 
             <button type="submit" class="btn-login" id="submit-btn" disabled>
@@ -338,11 +368,18 @@
             <button class="demo-btn" onclick="fillDemo('teacher')">Teacher</button>
             <button class="demo-btn" onclick="fillDemo('student')">Student</button>
         </div>
+
+        <div style="margin-top: 1.5rem; text-align: center;">
+            <a href="#" onclick="runDiagnostics()"
+                style="font-size: 0.75rem; color: var(--gray-400); text-decoration: none;">
+                <i class="fas fa-tools"></i> Trouble logging in? Run Diagnostics
+            </a>
+        </div>
     </div>
 
     <script src="js/auth.js"></script>
     <script>
-        const ADMIN_EMAIL = 'admin@eduflow.com';
+        const ADMIN_EMAIL = 'admin@smsportal.com';
 
         // Admin reveal logic
         let clickCount = 0;
@@ -387,11 +424,25 @@
             element.classList.add('active');
             document.getElementById('role-select').value = role;
             document.getElementById('submit-btn').disabled = false;
+
+            // Update placeholder based on role
+            const usernameInput = document.getElementById('username');
+            const usernameLabel = document.getElementById('username-label');
+            if (role === 'admin') {
+                usernameInput.placeholder = 'admin@smsportal.com';
+                usernameLabel.textContent = 'Administrator Email';
+            } else if (role === 'teacher') {
+                usernameInput.placeholder = 'e.g. teacher1';
+                usernameLabel.textContent = 'Faculty Username';
+            } else {
+                usernameInput.placeholder = 'e.g. stu0001';
+                usernameLabel.textContent = 'Student Identity UID';
+            }
         }
 
         function fillDemo(role) {
             const users = {
-                admin: { u: 'admin@eduflow.com', p: '123' },
+                admin: { u: 'admin@smsportal.com', p: '123' },
                 teacher: { u: 'teacher', p: '123' },
                 student: { u: 'student', p: '123' }
             };
@@ -404,7 +455,7 @@
             document.getElementById('password').value = users[role].p;
         }
 
-        document.getElementById('login-form').addEventListener('submit', function (e) {
+        document.getElementById('login-form').addEventListener('submit', async function (e) {
             e.preventDefault();
             const btn = document.getElementById('submit-btn');
             const originalText = btn.innerHTML;
@@ -412,13 +463,14 @@
             btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Authenticating...';
             btn.disabled = true;
 
-            setTimeout(() => {
-                const user = document.getElementById('username').value;
-                const pass = document.getElementById('password').value;
-                const role = document.getElementById('role-select').value;
-                const errorBox = document.getElementById('error-box');
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const role = document.getElementById('role-select').value;
+            const rememberMe = document.getElementById('remember-me').checked;
+            const errorBox = document.getElementById('error-box');
 
-                const result = Auth.login(user, pass, role);
+            try {
+                const result = await Auth.login(user, pass, role, rememberMe);
                 if (result.success) {
                     window.location.href = 'index.html';
                 } else {
@@ -432,12 +484,44 @@
                     setTimeout(() => card.style.transform = 'translateX(-10px)', 100);
                     setTimeout(() => card.style.transform = 'translateX(0)', 200);
                 }
-            }, 1000);
+            } catch (error) {
+                console.error('Login error:', error);
+                errorBox.textContent = 'A system error occurred. Please try again.';
+                errorBox.style.display = 'block';
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         });
 
-        if (Auth.isAuthenticated()) {
-            window.location.href = 'index.html';
+        async function runDiagnostics() {
+            if (confirm('Run authentication diagnostics? This will fix common login issues without deleting your data.')) {
+                console.log('Running diagnostics...');
+
+                // 1. Force a clean initialization
+                // We clear the init promise so it runs again
+                Auth._initPromise = null;
+                await Auth.init();
+
+                // 2. Check for admin
+                const users = JSON.parse(localStorage.getItem('sms_users') || '[]');
+                const adminExists = users.some(u => u.role === 'admin');
+
+                if (adminExists) {
+                    alert('Diagnostics Complete: Admin account found. Please try logging in with admin@smsportal.com / 123');
+                } else {
+                    alert('Diagnostics Complete: Admin account restored. Please try logging in with admin@smsportal.com / 123');
+                }
+
+                location.reload(); // Refresh to apply changes
+            }
         }
+
+        (async () => {
+            await Auth.init();
+            if (Auth.isAuthenticated()) {
+                window.location.href = 'index.html';
+            }
+        })();
     </script>
 </body>
 
