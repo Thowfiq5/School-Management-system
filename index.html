@@ -261,6 +261,8 @@
             ],
             teacher: [
                 { id: 'my-profile', title: 'My Profile', icon: 'fas fa-user-circle', module: 'viewMyProfile' },
+                { id: 'my-attendance', title: 'My Attendance', icon: 'fas fa-calendar-check', module: 'viewMyAttendance' },
+                { id: 'my-docs', title: 'My Documents', icon: 'fas fa-folder', module: 'viewMyDocuments' },
                 { id: 'teacher-dash', title: 'Classroom Dashboard', icon: 'fas fa-tachometer-alt', module: 'teacherDashboard' },
                 { id: 'mark-attendance', title: 'Attendance', icon: 'fas fa-calendar-check', module: 'markAttendance' },
                 { id: 'enter-marks', title: 'Exam Marks', icon: 'fas fa-file-invoice', module: 'enterMarks' },
@@ -290,8 +292,9 @@
             if (user.role === 'teacher') {
                 const hasSelectedClass = sessionStorage.getItem('selectedTeacherClassId');
                 if (!hasSelectedClass) {
-                    // Filter to only show "My Profile"
-                    items = items.filter(item => item.id === 'my-profile');
+                    // Filter to only show Profile and Personal stuff
+                    const allowedIds = ['my-profile', 'my-attendance', 'my-docs'];
+                    items = items.filter(item => allowedIds.includes(item.id));
                 }
             }
 
