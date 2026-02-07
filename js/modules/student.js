@@ -891,41 +891,125 @@ const StudentModule = {
         if (!p) return NotificationSystem.showToast('Error', 'Receipt not found.', 'error');
 
         const user = Auth.getCurrentUser();
-        const student = this.getStudentData(user);
+        // For admin usage, we might need to fetch student data differently, but this is StudentModule
+        // so we assume current user context or fetch by safely.
+        // Actually, if called from Admin, this module might not be the best place?
+        // But let's assume this is for Student Portal usage primarily.
 
-        const receiptContent = `
-==========================================
-        SCHOOL MANAGEMENT SYSTEM
-            OFFICIAL RECEIPT
-==========================================
-Receipt ID: ${p.id}
-Date:       ${new Date(p.date).toLocaleString()}
-------------------------------------------
-Student Name:  ${student.name}
-Admission No:  ${student.admissionNo}
-------------------------------------------
-DESCRIPTION                    AMOUNT
-------------------------------------------
-${(p.description || 'School Fee').padEnd(30)} ₹${p.amount.toString().padStart(8)}
-------------------------------------------
-TOTAL PAID:                   ₹${p.amount.toString().padStart(8)}
-------------------------------------------
-Payment Method: ${p.method}
-Status:         COMPLETED
-==========================================
-        Thank you for your payment!
-==========================================
+        let student = this.getStudentData(user);
+        // Fallback if student data isn't found (e.g. if accessed via some other means)
+        if (!student) {
+            const students = Storage.get(STORAGE_KEYS.STUDENTS);
+            student = students.find(s => s.id === p.studentId) || { name: 'Unknown', admissionNo: 'N/A', className: 'N/A', section: '' };
+        }
+
+        const schoolName = "SCHOOL MANAGEMENT SYSTEM";
+        const schoolAddress = "123 Education Lane, Knowledge City, State - 400001";
+
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Fee Receipt - ${p.id}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; padding: 40px; background: #f4f4f4; }
+                    .receipt-container { max-width: 700px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+                    .header { text-align: center; margin-bottom: 2rem; border-bottom: 2px solid #eee; padding-bottom: 2rem; }
+                    .header h1 { margin: 0; color: #2563eb; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
+                    .header p { margin: 5px 0 0; font-size: 14px; color: #666; }
+                    .receipt-info { display: flex; justify-content: space-between; margin-bottom: 2rem; }
+                    .info-group h4 { margin: 0 0 5px; font-size: 12px; color: #888; text-transform: uppercase; }
+                    .info-group p { margin: 0; font-weight: 600; font-size: 16px; }
+                    .bill-to { margin-bottom: 2rem; background: #f9fafb; padding: 20px; border-radius: 6px; }
+                    .table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+                    .table th { text-align: left; padding: 12px; border-bottom: 2px solid #eee; color: #666; font-size: 13px; text-transform: uppercase; }
+                    .table td { padding: 15px 12px; border-bottom: 1px solid #eee; font-size: 15px; }
+                    .total-row td { border-top: 2px solid #2563eb; border-bottom: none; font-weight: 700; font-size: 18px; color: #2563eb; padding-top: 15px; }
+                    .footer { text-align: center; margin-top: 3rem; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+                    .stamp { position: fixed; top: 40%; right: 10%; border: 3px solid #22c55e; color: #22c55e; font-size: 30px; font-weight: 800; padding: 10px 20px; text-transform: uppercase; letter-spacing: 3px; transform: rotate(-15deg); opacity: 0.2; pointer-events: none; border-radius: 8px; }
+                    .print-btn { display: block; width: 100%; padding: 15px; background: #2563eb; color: white; border: none; font-size: 16px; font-weight: 600; cursor: pointer; border-radius: 6px; margin-top: 20px; }
+                    .print-btn:hover { background: #1d4ed8; }
+                    @media print {
+                        body { background: white; padding: 0; }
+                        .receipt-container { box-shadow: none; padding: 0; }
+                        .print-btn { display: none; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="receipt-container">
+                    <div class="stamp">PAID</div>
+                    
+                    <div class="header">
+                        <h1>${schoolName}</h1>
+                        <p>${schoolAddress}</p>
+                        <p>Tel: +91 98765 43210 | Email: office@school.edu</p>
+                    </div>
+
+                    <div class="receipt-info">
+                        <div class="info-group">
+                            <h4>Receipt No</h4>
+                            <p>#${p.id}</p>
+                        </div>
+                        <div class="info-group" style="text-align: right;">
+                            <h4>Date</h4>
+                            <p>${new Date(p.date).toLocaleDateString()} ${new Date(p.date).toLocaleTimeString()}</p>
+                        </div>
+                    </div>
+
+                    <div class="bill-to">
+                        <div class="info-group">
+                            <h4>Received From</h4>
+                            <p>${student.name}</p>
+                            <span style="font-size: 14px; color: #555;">Adm No: ${student.admissionNo} | Class: ${student.className} - ${student.section}</span>
+                        </div>
+                    </div>
+
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th style="text-align: right;">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>${p.description || 'School Fee Payment'}</td>
+                                <td style="text-align: right;">&#8377; ${p.amount.toLocaleString()}</td>
+                            </tr>
+                            <tr>
+                                <td><span style="font-size: 13px; color: #888;">Payment Method: ${p.method}</span></td>
+                                <td></td>
+                            </tr>
+                            <tr class="total-row">
+                                <td>Total Paid</td>
+                                <td style="text-align: right;">&#8377; ${p.amount.toLocaleString()}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="footer">
+                        <p>This is a computer-generated receipt and does not require a signature.</p>
+                        <p>Generated on ${new Date().toLocaleString()}</p>
+                    </div>
+
+                    <button class="print-btn" onclick="window.print()">Print Receipt</button>
+                </div>
+            </body>
+            </html>
         `;
 
-        const blob = new Blob([receiptContent], { type: 'text/plain' });
+        const blob = new Blob([htmlContent], { type: 'text/html' });
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Receipt_${p.id}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        const win = window.open(url, '_blank');
+        if (!win) {
+            // Fallback for popup blockers
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.click();
+        }
     },
 
     payClassFee() {
