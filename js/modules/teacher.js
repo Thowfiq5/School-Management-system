@@ -142,13 +142,31 @@ const TeacherModule = {
         const selectedClass = classes.find(c => c.id === classId);
         const currentMonth = new Date().getMonth() + 1;
         const currentYear = new Date().getFullYear();
+        const today = new Date().toISOString().split('T')[0];
 
         container.innerHTML = `
             <div class="glass-panel" style="padding: 1.5rem; margin-bottom: 2rem;">
-                <div style="margin-bottom: 1rem;">
-                    <h2 style="margin: 0;">My Attendance</h2>
-                    <p style="color: var(--gray-600); font-size: 0.875rem; margin-top: 0.5rem;">View your attendance records for ${selectedClass.name} ${selectedClass.section}</p>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+                    <div>
+                        <h2 style="margin: 0;">Student Attendance</h2>
+                        <p style="color: var(--gray-600); font-size: 0.875rem; margin-top: 0.5rem;">Manage attendance for ${selectedClass.name} ${selectedClass.section}</p>
+                    </div>
                 </div>
+
+                <div class="glass-card" style="padding: 1.5rem; background: var(--gray-50); border: 1px solid var(--gray-200); margin-bottom: 2rem;">
+                    <h4 style="margin-top: 0; margin-bottom: 1rem; color: var(--primary);">Take / Edit Attendance</h4>
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="flex: 1; min-width: 200px;">
+                            <label class="form-label">Select Date</label>
+                            <input type="date" id="attendance-date" class="form-control" value="${today}" max="${today}">
+                        </div>
+                        <button class="btn btn-primary" onclick="TeacherModule.loadAttendanceForEditing()">
+                            <i class="fas fa-edit"></i> Edit Attendance
+                        </button>
+                    </div>
+                </div>
+
+                <h4 style="margin-bottom: 1rem; color: var(--gray-600);">View Monthly Summary</h4>
                 <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: flex-end;">
                     <div class="form-group">
                         <label class="form-label">Month</label>
@@ -167,18 +185,112 @@ const TeacherModule = {
                         </select>
                     </div>
                     <div class="form-group">
-                        <button class="btn btn-primary" onclick="TeacherModule.loadTeacherAttendance()">
-                            <i class="fas fa-search"></i> View Records
+                        <button class="btn" style="background: var(--gray-800); color: white;" onclick="TeacherModule.loadTeacherAttendance()">
+                            <i class="fas fa-search"></i> View Summary
                         </button>
                     </div>
                 </div>
             </div>
             <div id="attendance-list-container"></div>
         `;
+
+        // Load summary by default
+        this.loadTeacherAttendance();
+    },
+
+    loadAttendanceForEditing() {
+        const date = document.getElementById('attendance-date').value;
+        if (!date) return NotificationSystem.showToast('Select Date', 'Please select a date to edit attendance.', 'warning');
+
+        const classId = sessionStorage.getItem('selectedTeacherClassId');
+        const container = document.getElementById('attendance-list-container');
+        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
+
+        // Find existing record for this date
+        const attendanceRecords = Storage.get(STORAGE_KEYS.ATTENDANCE);
+        const existingRecord = attendanceRecords.find(a => a.classId === classId && a.date === date);
+        const attendanceData = existingRecord ? existingRecord.data : {};
+
+        if (students.length === 0) {
+            container.innerHTML = `<div class="glass-panel" style="text-align: center; color: var(--gray-500);">No students found in this class.</div>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="glass-panel" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h3 style="margin: 0;">Attendance for ${new Date(date).toLocaleDateString()}</h3>
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn" style="padding: 5px 10px; font-size: 0.8rem;" onclick="TeacherModule.markAllAttendance('present')">Mark All Present</button>
+                        <button class="btn" style="padding: 5px 10px; font-size: 0.8rem; background: #fee2e2; color: #991b1b;" onclick="TeacherModule.markAllAttendance('absent')">Mark All Absent</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="background: var(--gray-50);">
+                            <tr>
+                                <th style="padding: 12px; text-align: left;">Roll No</th>
+                                <th style="padding: 12px; text-align: left;">Student Name</th>
+                                <th style="padding: 12px; text-align: center;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${students.map(s => {
+            const status = attendanceData[s.id] || 'present'; // Default to present
+            return `
+                                    <tr style="border-bottom: 1px solid var(--gray-100);">
+                                        <td style="padding: 12px; font-weight: 600;">${s.admissionNo}</td>
+                                        <td style="padding: 12px;">${s.name}</td>
+                                        <td style="padding: 12px; text-align: center;">
+                                            <div style="display: inline-flex; background: var(--gray-100); padding: 4px; border-radius: 8px;">
+                                                <label style="cursor: pointer; padding: 6px 12px; border-radius: 6px; background: ${status === 'present' ? 'var(--success)' : 'transparent'}; color: ${status === 'present' ? 'white' : 'var(--gray-600)'}; transition: all 0.2s;" onclick="this.parentNode.querySelector('input[value=present]').click(); TeacherModule.updateAttendanceUI(this, 'present')">
+                                                    Present
+                                                    <input type="radio" name="attn_${s.id}" value="present" ${status === 'present' ? 'checked' : ''} style="display: none;">
+                                                </label>
+                                                <label style="cursor: pointer; padding: 6px 12px; border-radius: 6px; background: ${status === 'absent' ? 'var(--danger)' : 'transparent'}; color: ${status === 'absent' ? 'white' : 'var(--gray-600)'}; transition: all 0.2s;" onclick="this.parentNode.querySelector('input[value=absent]').click(); TeacherModule.updateAttendanceUI(this, 'absent')">
+                                                    Absent
+                                                    <input type="radio" name="attn_${s.id}" value="absent" ${status === 'absent' ? 'checked' : ''} style="display: none;">
+                                                </label>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+        }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top: 2rem; text-align: right;">
+                    <button class="btn btn-primary" onclick="TeacherModule.saveAttendance('${classId}', '${date}')" style="padding: 12px 30px; font-size: 1rem;">
+                        <i class="fas fa-save"></i> Save Attendance
+                    </button>
+                </div>
+            </div>
+        `;
+    },
+
+    updateAttendanceUI(label, status) {
+        const parent = label.parentNode;
+        const labels = parent.querySelectorAll('label');
+        labels.forEach(l => {
+            l.style.background = 'transparent';
+            l.style.color = 'var(--gray-600)';
+        });
+
+        label.style.background = status === 'present' ? 'var(--success)' : 'var(--danger)';
+        label.style.color = 'white';
+    },
+
+    markAllAttendance(status) {
+        const radios = document.querySelectorAll(`input[value="${status}"]`);
+        radios.forEach(r => {
+            r.checked = true;
+            this.updateAttendanceUI(r.parentNode, status);
+        });
     },
 
     loadTeacherAttendance() {
-        const user = Auth.getCurrentUser();
         const month = parseInt(document.getElementById('attn-month').value);
         const year = parseInt(document.getElementById('attn-year').value);
         const classId = sessionStorage.getItem('selectedTeacherClassId');
@@ -186,83 +298,118 @@ const TeacherModule = {
 
         const classes = Storage.get(STORAGE_KEYS.CLASSES);
         const selectedClass = classes.find(c => c.id === classId);
+        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
 
         // Get all attendance records for this class and month/year
-        const allAttendance = Storage.get(STORAGE_KEYS.ATTENDANCE).filter(a => {
+        const attendanceRecords = Storage.get(STORAGE_KEYS.ATTENDANCE).filter(a => {
             const d = new Date(a.date);
             return a.classId === classId && (d.getMonth() + 1) === month && d.getFullYear() === year;
         });
 
-        if (allAttendance.length === 0) {
+        if (attendanceRecords.length === 0) {
             container.innerHTML = `
                 <div class="glass-panel" style="padding: 2rem; text-align: center; background: #fef3c7; border: 1px solid #fcd34d;">
                     <i class="fas fa-calendar-times" style="color: #d97706; font-size: 2rem; margin-bottom: 1rem;"></i>
                     <h3 style="color: #92400e; margin: 0;">No Attendance Records</h3>
-                    <p style="color: #b45309; margin: 0.5rem 0 0 0;">No attendance has been marked for this period.</p>
+                    <p style="color: #b45309; margin: 0.5rem 0 0 0;">No attendance has been taken for this month yet.</p>
                 </div>
             `;
             return;
         }
 
-        let presentDays = 0;
-        let absentDays = 0;
-
-        const attendanceHtml = allAttendance.sort((a, b) => new Date(a.date) - new Date(b.date)).map(record => {
-            const dateObj = new Date(record.date);
-            const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-
-            // For now, mark as present for all records (teachers are present for all marked records)
-            presentDays++;
-
-            return `
-                <tr style="border-bottom: 1px solid var(--gray-100);">
-                    <td style="padding: 1rem;">${dateStr}</td>
-                    <td style="padding: 1rem; text-align: center;">
-                        <span style="background: #dcfce7; color: #166534; padding: 0.5rem 1rem; border-radius: 20px; font-weight: 600; font-size: 0.875rem;">Present</span>
-                    </td>
-                </tr>
+        if (students.length === 0) {
+            container.innerHTML = `
+                <div class="glass-panel" style="padding: 2rem; text-align: center; color: var(--gray-500);">
+                    <p>No students found in this class.</p>
+                </div>
             `;
-        }).join('');
+            return;
+        }
 
-        const attendancePercentage = allAttendance.length > 0 ? ((presentDays / allAttendance.length) * 100).toFixed(1) : '0.0';
+        // Calculate stats for each student
+        const studentStats = students.map(student => {
+            let present = 0;
+            let absent = 0;
+            const total = attendanceRecords.length;
+
+            attendanceRecords.forEach(record => {
+                const status = record.data[student.id];
+                if (status === 'present') present++;
+                else if (status === 'absent') absent++;
+            });
+
+            return {
+                ...student,
+                present,
+                absent,
+                total,
+                percentage: total > 0 ? ((present / total) * 100).toFixed(1) : '0.0'
+            };
+        });
 
         container.innerHTML = `
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-                <div class="glass-card" style="padding: 1.5rem; text-align: center; background: linear-gradient(135deg, #dcfce7, #bbf7d0);">
-                    <p style="margin: 0; font-size: 0.875rem; color: #166534;">Days Present</p>
-                    <h3 style="margin: 0.5rem 0 0 0; color: #166534; font-size: 2rem;">${presentDays}</h3>
-                </div>
-                <div class="glass-card" style="padding: 1.5rem; text-align: center; background: linear-gradient(135deg, #f3f4f6, #e5e7eb);">
-                    <p style="margin: 0; font-size: 0.875rem; color: #6b7280;">Total Records</p>
-                    <h3 style="margin: 0.5rem 0 0 0; color: #6b7280; font-size: 2rem;">${allAttendance.length}</h3>
-                </div>
-                <div class="glass-card" style="padding: 1.5rem; text-align: center; background: linear-gradient(135deg, #dbeafe, #bfdbfe);">
-                    <p style="margin: 0; font-size: 0.875rem; color: #1e40af;">Attendance %</p>
-                    <h3 style="margin: 0.5rem 0 0 0; color: #1e40af; font-size: 2rem;">${attendancePercentage}%</h3>
-                </div>
-            </div>
-
             <div class="glass-panel" style="padding: 0;">
-            <div class="table-responsive">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead style="background: var(--gray-50);">
-                        <tr>
-                            <th style="padding: 1rem; text-align: left;">Date</th>
-                            <th style="padding: 1rem; text-align: center;">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${attendanceHtml}
-                    </tbody>
-                </table>
-            </div>
+                <div class="table-responsive">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="background: var(--gray-50);">
+                            <tr>
+                                <th style="padding: 12px; text-align: left;">Roll No</th>
+                                <th style="padding: 12px; text-align: left;">Student Name</th>
+                                <th style="padding: 12px; text-align: center;">Working Days</th>
+                                <th style="padding: 12px; text-align: center;">Present</th>
+                                <th style="padding: 12px; text-align: center;">Absent</th>
+                                <th style="padding: 12px; text-align: center;">Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${studentStats.map(s => `
+                                <tr style="border-bottom: 1px solid var(--gray-100);">
+                                    <td style="padding: 12px; font-weight: 600;">${s.admissionNo}</td>
+                                    <td style="padding: 12px;">${s.name}</td>
+                                    <td style="padding: 12px; text-align: center;">${s.total}</td>
+                                    <td style="padding: 12px; text-align: center; color: var(--success); font-weight: 600;">${s.present}</td>
+                                    <td style="padding: 12px; text-align: center; color: var(--danger); font-weight: 600;">${s.absent}</td>
+                                    <td style="padding: 12px; text-align: center;">
+                                        <span class="badge" style="background: ${s.percentage >= 75 ? 'var(--success-light)' : '#fee2e2'}; color: ${s.percentage >= 75 ? 'var(--success)' : '#991b1b'};">
+                                            ${s.percentage}%
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         `;
     },
 
     saveAttendance(classId, date) {
-        // This function is no longer used - attendance is now view-only for teachers
-        return;
+        const students = Storage.get(STORAGE_KEYS.STUDENTS).filter(s => s.classId === classId);
+        const data = {};
+
+        students.forEach(s => {
+            const status = document.querySelector(`input[name="attn_${s.id}"]:checked`).value;
+            data[s.id] = status;
+        });
+
+        const attendanceRecords = Storage.get(STORAGE_KEYS.ATTENDANCE);
+        // Remove existing record for this date if exists
+        const filteredRecords = attendanceRecords.filter(a => !(a.classId === classId && a.date === date));
+
+        filteredRecords.push({
+            id: Date.now().toString(),
+            classId: classId,
+            date: date,
+            data: data,
+            markedBy: Auth.getCurrentUser().id,
+            timestamp: new Date().toISOString()
+        });
+
+        Storage.save(STORAGE_KEYS.ATTENDANCE, filteredRecords);
+        NotificationSystem.showToast('Success', 'Attendance saved successfully!', 'success');
+
+        // Return to summary view
+        this.loadTeacherAttendance();
     },
 
     enterMarks(container) {
@@ -1581,113 +1728,294 @@ const TeacherModule = {
 
         const currentClassId = sessionStorage.getItem('selectedTeacherClassId');
 
-        // Get attendance data for current month
+        // Get REAL attendance data for current month
         const now = new Date();
         const currentMonth = now.getMonth() + 1;
         const currentYear = now.getFullYear();
-        const attendance = Storage.get(STORAGE_KEYS.ATTENDANCE) || [];
+        const attendanceRecords = Storage.get(STORAGE_KEYS.TEACHER_ATTENDANCE) || [];
 
-        // Calculate attendance summary - teacher is present for all marked attendance records
-        // Count unique dates where attendance was marked for any class
-        const uniqueDates = new Set();
-        attendance.forEach(record => {
+        // Calculate attendance summary based on Admin's marking
+        let daysPresent = 0;
+        let daysAbsent = 0;
+        let totalMarkedDays = 0;
+
+        attendanceRecords.forEach(record => {
             const d = new Date(record.date);
-            if ((d.getMonth() + 1) === currentMonth && d.getFullYear() === currentYear && record.date) {
-                uniqueDates.add(record.date);
+            if ((d.getMonth() + 1) === currentMonth && d.getFullYear() === currentYear) {
+                if (record.data && record.data[teacherData.id]) {
+                    totalMarkedDays++;
+                    if (record.data[teacherData.id] === 'present') {
+                        daysPresent++;
+                    } else {
+                        daysAbsent++;
+                    }
+                }
             }
         });
-        const totalDays = uniqueDates.size;
-        // If there are attendance records, teacher attended all of them (100%)
-        const attendancePercentage = totalDays > 0 ? '100.0' : '0.0';
+
+        const attendancePercentage = totalMarkedDays > 0
+            ? ((daysPresent / totalMarkedDays) * 100).toFixed(1)
+            : '0.0';
+
+        // Document Types
+        const docTypes = [
+            { id: 'resume', name: 'Resume / CV' },
+            { id: 'id_proof', name: 'ID Proof (Aadhar/PAN)' },
+            { id: 'contract', name: 'Employment Contract' }
+        ];
 
         container.innerHTML = `
-            <div class="glass-panel" style="max-width: 800px; margin: 0 auto; padding: 2.5rem;">
-                <div style="text-align: center; margin-bottom: 2rem;">
-                    <div style="width: 100px; height: 100px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-size: 3rem; margin: 0 auto 1rem; font-weight: bold;">
-                        ${user.name.charAt(0)}
-                    </div>
-                    <h2 style="margin: 0;">${user.name}</h2>
-                    <span class="badge" style="background: #fef3c7; color: #92400e; text-transform: uppercase; font-size: 0.75rem;">${user.role}</span>
-                </div>
+            <div style="max-width: 1200px; margin: 0 auto; padding: 1rem;">
+                <div style="display: grid; grid-template-columns: 350px 1fr; gap: 2rem; align-items: start;">
+                    
+                    <!-- LEFT COLUMN -->
+                    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        
+                        <!-- Profile Card -->
+                        <div class="glass-panel" style="text-align: center; padding: 2rem;">
+                            <div style="width: 100px; height: 100px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-size: 3rem; margin: 0 auto 1rem; font-weight: bold;">
+                                ${user.name.charAt(0)}
+                            </div>
+                            <h2 style="margin: 0;">${user.name}</h2>
+                            <p style="color: var(--gray-500); margin: 0.5rem 0 1rem;">${user.username}</p>
+                            <span class="badge" style="background: #fef3c7; color: #92400e; text-transform: uppercase; font-size: 0.75rem;">${user.role}</span>
+                        </div>
 
-                <!-- Attendance Summary -->
-                <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(167, 243, 208, 0.1)); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 2px solid rgba(16, 185, 129, 0.4);">
-                    <h3 style="margin-top: 0; color: #059669; display: flex; align-items: center; gap: 0.75rem;">
-                        <i class="fas fa-calendar-check" style="font-size: 1.5rem;"></i> Your Attendance
-                    </h3>
-                    <p style="font-size: 0.875rem; color: var(--gray-600); margin: 0.5rem 0 1rem 0;">
-                        📅 Attendance record for ${new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-                    </p>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-                        <div style="padding: 1.25rem; background: white; border-radius: 8px; text-align: center; border: 2px solid #d1fae5; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.1);">
-                            <p style="margin: 0; font-size: 0.875rem; color: #6b7280; font-weight: 500;">Days Present</p>
-                            <h3 style="margin: 0.75rem 0 0 0; color: #059669; font-size: 2.5rem; font-weight: bold;">${totalDays}</h3>
-                            <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #9ca3af;">days this month</p>
+                        <!-- Attendance Summary -->
+                        <div class="glass-panel" style="padding: 1.5rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(167, 243, 208, 0.05)); border-left: 4px solid #10b981;">
+                            <h3 style="margin-top: 0; color: #059669; display: flex; align-items: center; gap: 0.75rem; font-size: 1.1rem;">
+                                <i class="fas fa-calendar-check"></i> Your Attendance
+                            </h3>
+                            <p style="font-size: 0.8rem; color: var(--gray-600); margin-bottom: 1rem;">
+                                ${new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                            </p>
+                            
+                            <div style="display: flex; justify-content: space-between; text-align: center; margin-bottom: 1rem;">
+                                <div>
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #059669;">${daysPresent}/${totalMarkedDays}</div>
+                                    <div style="font-size: 0.75rem; color: var(--gray-500);">Days Present</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #059669;">${attendancePercentage}%</div>
+                                    <div style="font-size: 0.75rem; color: var(--gray-500);">Percentage</div>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--gray-500); background: rgba(255,255,255,0.5); padding: 0.5rem; border-radius: 4px;">
+                                <i class="fas fa-info-circle"></i> Based on admin records.
+                            </div>
                         </div>
-                        <div style="padding: 1.25rem; background: white; border-radius: 8px; text-align: center; border: 2px solid #d1fae5; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.1);">
-                            <p style="margin: 0; font-size: 0.875rem; color: #6b7280; font-weight: 500;">Attendance %</p>
-                            <h3 style="margin: 0.75rem 0 0 0; color: #059669; font-size: 2.5rem; font-weight: bold;">${attendancePercentage}%</h3>
-                            <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #9ca3af;">for current month</p>
+
+                        <!-- My Documents Section -->
+                        <div class="glass-panel" style="padding: 1.5rem;">
+                            <h3 style="margin-top: 0; color: #2563eb; display: flex; align-items: center; gap: 0.75rem; font-size: 1.1rem; margin-bottom: 1rem;">
+                                <i class="fas fa-folder-open"></i> My Documents
+                            </h3>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                ${docTypes.map(doc => {
+            const docInfo = Storage.getTeacherDocument(teacherData.id, doc.id);
+            const isUploaded = docInfo.type === 'manual';
+            return `
+                                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: rgba(255,255,255,0.5); border-radius: 8px; border: 1px solid var(--gray-200);">
+                                            <div style="overflow: hidden;">
+                                                <div style="font-size: 0.85rem; font-weight: 600; color: var(--gray-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${doc.name}</div>
+                                                <div style="font-size: 0.7rem;">
+                                                    ${isUploaded
+                    ? `<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Available</span>`
+                    : `<span style="color: var(--gray-400);">Missing</span>`
+                }
+                                                </div>
+                                            </div>
+                                            ${isUploaded
+                    ? `<button class="btn-icon" style="color: var(--primary);" onclick="window.open('${docInfo.src}')" title="View"><i class="fas fa-eye"></i></button>`
+                    : ``
+                }
+                                        </div>
+                                    `;
+        }).join('')}
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- RIGHT COLUMN -->
+                    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        
+                        <!-- Class Selection Area -->
+                        <div class="glass-panel" style="padding: 2rem; background: linear-gradient(to right, rgba(79, 70, 229, 0.05), rgba(168, 85, 247, 0.05)); border: 1px solid rgba(79, 70, 229, 0.1);">
+                            <h3 style="margin-top: 0; color: var(--primary); margin-bottom: 0.5rem;">
+                                <i class="fas fa-chalkboard-teacher"></i> Class Management
+                            </h3>
+                            <p style="font-size: 0.875rem; color: var(--gray-600); margin-bottom: 1.5rem;">
+                                Select the active class you want to manage.
+                            </p>
+                            <div style="display: flex; gap: 1rem; align-items: flex-end;">
+                                <div style="flex: 1;">
+                                    <label class="form-label">Assigned Classes</label>
+                                    <select id="profile-class-select" class="form-control">
+                                        <option value="">-- Select Class --</option>
+                                        ${availableClasses.map(c => `
+                                            <option value="${c.id}" ${currentClassId === c.id ? 'selected' : ''}>
+                                                ${c.name} - ${c.section}
+                                            </option>
+                                        `).join('')}
+                                    </select>
+                                </div>
+                                <button class="btn btn-primary" onclick="TeacherModule.confirmProfileClassSelection()">
+                                    Open Dashboard <i class="fas fa-arrow-right"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Personal Details Grid -->
+                        <div class="glass-panel" style="padding: 2rem;">
+                            <h3 style="margin-top: 0; margin-bottom: 1.5rem; color: var(--gray-800);">Personal Details</h3>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                                <div>
+                                    <label style="font-size: 0.75rem; color: var(--gray-500); display: block; margin-bottom: 0.25rem;">Employee ID</label>
+                                    <div style="font-size: 1rem; font-weight: 600; color: var(--gray-800);">${teacherData.employeeId || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.75rem; color: var(--gray-500); display: block; margin-bottom: 0.25rem;">Subject Specialty</label>
+                                    <div style="font-size: 1rem; font-weight: 600; color: var(--gray-800);">${teacherData.subject || 'All Subjects'}</div>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.75rem; color: var(--gray-500); display: block; margin-bottom: 0.25rem;">Mobile Number</label>
+                                    <div style="font-size: 1rem; font-weight: 600; color: var(--gray-800);">${teacherData.mobile || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.75rem; color: var(--gray-500); display: block; margin-bottom: 0.25rem;">Email</label>
+                                    <div style="font-size: 1rem; font-weight: 600; color: var(--gray-800);">${teacherData.email || user.username}</div>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.75rem; color: var(--gray-500); display: block; margin-bottom: 0.25rem;">Joined Date</label>
+                                    <div style="font-size: 1rem; font-weight: 600; color: var(--gray-800);">${teacherData.doj ? new Date(teacherData.doj).toLocaleDateString() : 'N/A'}</div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-100);">
+                                <button class="btn" style="width: 100%; border: 1px dashed var(--gray-300); color: var(--gray-500);" onclick="NotificationSystem.showToast('Info', 'Contact Admin to update profile details', 'info')">
+                                    <i class="fas fa-pen"></i> Request Profile Update
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    viewMyAttendance(container) {
+        const user = Auth.getCurrentUser();
+        const allTeachers = Storage.get(STORAGE_KEYS.TEACHERS);
+        const teacherData = allTeachers.find(t => t.username === user.username) || {};
+
+        // Get REAL attendance data for current month
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+        const attendanceRecords = Storage.get(STORAGE_KEYS.TEACHER_ATTENDANCE) || [];
+
+        let daysPresent = 0;
+        let totalMarkedDays = 0;
+
+        attendanceRecords.forEach(record => {
+            const d = new Date(record.date);
+            if ((d.getMonth() + 1) === currentMonth && d.getFullYear() === currentYear) {
+                if (record.data && record.data[teacherData.id]) {
+                    totalMarkedDays++;
+                    if (record.data[teacherData.id] === 'present') {
+                        daysPresent++;
+                    }
+                }
+            }
+        });
+
+        const attendancePercentage = totalMarkedDays > 0
+            ? ((daysPresent / totalMarkedDays) * 100).toFixed(1)
+            : '0.0';
+
+        container.innerHTML = `
+            <div style="max-width: 800px; margin: 2rem auto;">
+                <div class="glass-panel" style="padding: 1.5rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(167, 243, 208, 0.05)); border-left: 4px solid #10b981;">
+                    <h2 style="margin-top: 0; color: #059669; display: flex; align-items: center; gap: 0.75rem;">
+                        <i class="fas fa-calendar-check"></i> Your Attendance Log
+                    </h2>
+                    <p style="color: var(--gray-600); margin-bottom: 2rem;">
+                        Detailed attendance record for ${new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                    </p>
+                    
+                    <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
+                        <div style="flex: 1; padding: 1.5rem; background: white; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #059669;">${daysPresent}/${totalMarkedDays}</div>
+                            <div style="font-size: 0.875rem; color: var(--gray-500);">Days Present</div>
+                        </div>
+                        <div style="flex: 1; padding: 1.5rem; background: white; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 2rem; font-weight: bold; color: #059669;">${attendancePercentage}%</div>
+                            <div style="font-size: 0.875rem; color: var(--gray-500);">Percentage</div>
                         </div>
                     </div>
-                    <div style="padding: 1rem; background: rgba(16, 185, 129, 0.05); border-radius: 6px; border-left: 4px solid #059669;">
+
+                     <div style="padding: 1rem; background: rgba(16, 185, 129, 0.05); border-radius: 6px; border-left: 4px solid #059669;">
                         <p style="margin: 0; font-size: 0.875rem; color: #047857;">
-                            <i class="fas fa-info-circle"></i> Your attendance is marked automatically when attendance is recorded for your assigned classes.
+                            <i class="fas fa-info-circle"></i> This record is maintained by the School Administration.
                         </p>
                     </div>
                 </div>
+            </div>
+        `;
+    },
 
-                <!-- Class Selection Area -->
-                <div style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(168, 85, 247, 0.1)); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid rgba(79, 70, 229, 0.2);">
-                    <h3 style="margin-top: 0; color: var(--primary);">
-                        <i class="fas fa-chalkboard-teacher"></i> Class Selection
-                    </h3>
-                    <p style="font-size: 0.875rem; color: var(--gray-600); margin-bottom: 1rem;">
-                        Select the class you wish to manage for this session. You can change this later.
+    viewMyDocuments(container) {
+        const user = Auth.getCurrentUser();
+        const allTeachers = Storage.get(STORAGE_KEYS.TEACHERS);
+        const teacherData = allTeachers.find(t => t.username === user.username) || {};
+
+        const docTypes = [
+            { id: 'resume', name: 'Resume / CV' },
+            { id: 'id_proof', name: 'ID Proof (Aadhar/PAN)' },
+            { id: 'contract', name: 'Employment Contract' }
+        ];
+
+        container.innerHTML = `
+            <div style="max-width: 800px; margin: 2rem auto;">
+                <div class="glass-panel" style="padding: 1.5rem;">
+                    <h2 style="margin-top: 0; color: #2563eb; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                        <i class="fas fa-folder-open"></i> My Documents
+                    </h2>
+                    <p style="color: var(--gray-600); margin-bottom: 2rem;">
+                        Official documents on file.
                     </p>
-                    <div style="display: flex; gap: 1rem; align-items: flex-end;">
-                        <div style="flex: 1;">
-                            <label class="form-label">Assigned Classes</label>
-                            <select id="profile-class-select" class="form-control">
-                                <option value="">-- Select Class to Manage --</option>
-                                ${availableClasses.map(c => `
-                                    <option value="${c.id}" ${currentClassId === c.id ? 'selected' : ''}>
-                                        ${c.name} - ${c.section}
-                                    </option>
-                                `).join('')}
-                            </select>
-                        </div>
-                        <button class="btn btn-primary" onclick="TeacherModule.confirmProfileClassSelection()">
-                            <i class="fas fa-arrow-right"></i> Open Dashboard
-                        </button>
+                    
+                    <div style="display: grid; gap: 1rem;">
+                        ${docTypes.map(doc => {
+            const docInfo = Storage.getTeacherDocument(teacherData.id, doc.id);
+            const isUploaded = docInfo.type === 'manual';
+            return `
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: white; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                                    <div style="display: flex; align-items: center; gap: 1rem;">
+                                        <div style="width: 40px; height: 40px; background: ${isUploaded ? '#d1fae5' : '#f3f4f6'}; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                            <i class="fas ${isUploaded ? 'fa-file-alt' : 'fa-exclamation'}" style="color: ${isUploaded ? '#059669' : '#9ca3af'}"></i>
+                                        </div>
+                                        <div>
+                                            <strong style="color: var(--gray-800); font-size: 1.1rem; display: block;">${doc.name}</strong>
+                                            <div style="font-size: 0.85rem; margin-top: 4px;">
+                                                ${isUploaded
+                    ? `<span style="color: var(--success);"><i class="fas fa-check-circle"></i> On File</span>`
+                    : `<span style="color: var(--gray-400);">Not Uploaded</span>`
+                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    ${isUploaded
+                    ? `<button class="btn" style="color: var(--primary); border: 1px solid var(--primary-light);" onclick="window.open('${docInfo.src}')"><i class="fas fa-eye"></i> View Document</button>`
+                    : ``
+                }
+                                </div>
+                            `;
+        }).join('')}
                     </div>
-                </div>
-
-                <div style="display: grid; gap: 1rem;">
-                    <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div style="padding: 1rem; background: var(--gray-50); border-radius: var(--radius-md);">
-                            <label style="font-size: 0.75rem; color: var(--gray-500); display: block;">Employee ID</label>
-                            <strong style="color: var(--gray-800);">${teacherData.employeeId || 'N/A'}</strong>
-                        </div>
-                        <div style="padding: 1rem; background: var(--gray-50); border-radius: var(--radius-md);">
-                            <label style="font-size: 0.75rem; color: var(--gray-500); display: block;">Subject Specialty</label>
-                            <strong style="color: var(--gray-800);">${teacherData.subject || 'All Subjects'}</strong>
-                        </div>
-                    </div>
-                    <div style="padding: 1rem; background: var(--gray-50); border-radius: var(--radius-md);">
-                        <label style="font-size: 0.75rem; color: var(--gray-500); display: block;">Mobile Number</label>
-                        <strong style="color: var(--gray-800);">${teacherData.mobile || 'N/A'}</strong>
-                    </div>
-                    <div style="padding: 1rem; background: var(--gray-50); border-radius: var(--radius-md);">
-                        <label style="font-size: 0.75rem; color: var(--gray-500); display: block;">Username</label>
-                        <strong style="color: var(--gray-800);">${user.username}</strong>
-                    </div>
-                </div>
-
-                <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-100); text-align: center;">
-                    <button class="btn glass-card" style="font-size: 0.8125rem;" onclick="NotificationSystem.showToast('Demo Mode', 'Profile editing is restricted in demo mode.', 'info')">
-                        <i class="fas fa-edit"></i> Request Information Update
-                    </button>
                 </div>
             </div>
         `;
