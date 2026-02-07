@@ -15,6 +15,8 @@ const STORAGE_KEYS = {
     FEE_STRUCTURE: 'sms_fee_structure',
     FEES: 'sms_fees',
     DOCUMENTS: 'sms_documents',
+    TEACHER_DOCUMENTS: 'sms_teacher_documents',
+    TEACHER_ATTENDANCE: 'sms_teacher_attendance',
     USERS: 'sms_users', // For login system
     EXAM_TYPES: 'sms_exam_types',
     SUBMISSIONS: 'sms_submissions',
@@ -99,6 +101,20 @@ const Storage = {
 
         return {
             src: `documents/${fileId}_${docType}.jpg`,
+            type: 'auto'
+        };
+    },
+
+    getTeacherDocument(teacherId, docType) {
+        const allDocs = this.get(STORAGE_KEYS.TEACHER_DOCUMENTS);
+        const record = allDocs.find(d => d.teacherId === teacherId);
+
+        if (record && record[docType]) {
+            return { src: record[docType], type: 'manual' };
+        }
+
+        return {
+            src: `documents/teachers/${teacherId}_${docType}.jpg`,
             type: 'auto'
         };
     },
