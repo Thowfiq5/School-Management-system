@@ -961,11 +961,16 @@ const AdminModule = {
     // TEACHER MANAGEMENT
     manageTeachers(container) {
         container.innerHTML = `
-            <div class="top-bar" style="border: none; margin-bottom: 1rem;">
+            <div class="top-bar" style="border: none; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
                 <h2>Staff Management</h2>
-                <button class="btn btn-primary" onclick="AdminModule.showTeacherForm()">
-                    <i class="fas fa-plus"></i> Add Teacher
-                </button>
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn" style="background: var(--warning); color: #78350f;" onclick="AdminModule.manageTeacherAttendance('${container.id}')">
+                        <i class="fas fa-calendar-check"></i> Teacher Attendance
+                    </button>
+                    <button class="btn btn-primary" onclick="AdminModule.showTeacherForm()">
+                        <i class="fas fa-plus"></i> Add Teacher
+                    </button>
+                </div>
             </div>
             <div id="teachers-list" class="glass-panel" style="padding: 0;">
             <div class="table-responsive">
@@ -1005,11 +1010,219 @@ const AdminModule = {
                 <td style="padding: 1rem;">${t.subject || 'All Subjects'}</td>
                 <td style="padding: 1rem;">${t.mobile || 'N/A'}</td>
                 <td style="padding: 1rem; text-align: center;">
-                    <button class="btn" style="color: var(--primary);" title="Edit Teacher" onclick="AdminModule.showTeacherForm('${t.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn" style="color: var(--primary); margin-right: 5px;" title="Documents" onclick="AdminModule.manageTeacherDocuments('${t.id}')"><i class="fas fa-folder-open"></i></button>
+                    <button class="btn" style="color: var(--primary); margin-right: 5px;" title="Edit Teacher" onclick="AdminModule.showTeacherForm('${t.id}')"><i class="fas fa-edit"></i></button>
                     <button class="btn" style="color: var(--danger);" title="Delete Teacher" onclick="AdminModule.deleteTeacher('${t.id}')"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>
         `).join('');
+    },
+
+    manageTeacherDocuments(teacherId) {
+        const teacher = Storage.getItemById(STORAGE_KEYS.TEACHERS, teacherId);
+        const docTypes = [
+            { id: 'resume', name: 'Resume / CV' },
+            { id: 'id_proof', name: 'ID Proof (Aadhar/PAN)' },
+            { id: 'contract', name: 'Employment Contract' }
+        ];
+
+        const content = `
+            <div style="padding: 1rem;">
+                <p style="margin-bottom: 2rem; color: var(--gray-600);">Manage documents for <strong>${teacher.name}</strong></p>
+                ${docTypes.map(doc => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--gray-50); border-radius: 8px; margin-bottom: 1rem;">
+                        <div>
+                            <strong>${doc.name}</strong>
+                            <div style="font-size: 0.75rem; margin-top: 4px;">
+                                ${(() => {
+                const docInfo = Storage.getTeacherDocument(teacherId, doc.id);
+                if (docInfo.type === 'manual') {
+                    return `<span style="color: var(--success);"><i class="fas fa-check-circle"></i> Uploaded</span>`;
+                } else {
+                    return `<span style="color: var(--gray-400);">Not Uploaded</span>`;
+                }
+            })()}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            ${(() => {
+                const docInfo = Storage.getTeacherDocument(teacherId, doc.id);
+                return `
+                                    <button class="btn" style="${docInfo.type === 'manual' ? '' : 'display:none;'}" onclick="window.open('${docInfo.src}')">View</button>
+                                `;
+            })()}
+                            <label class="btn btn-primary" style="cursor: pointer;">
+                                <i class="fas fa-upload"></i> ${Storage.getTeacherDocument(teacherId, doc.id).type === 'manual' ? 'Update' : 'Upload'}
+                                <input type="file" style="display: none;" accept="image/*,application/pdf" onchange="AdminModule.handleTeacherDocUpload(this, '${doc.id}', '${teacherId}')">
+                            </label>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        this.showModal(`Documents: ${teacher.name}`, content, () => this.closeModal());
+        document.getElementById('modal-save-btn').style.display = 'none';
+    },
+
+    handleTeacherDocUpload(input, docType, teacherId) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+
+        if (file.size > 2 * 1024 * 1024) return NotificationSystem.showToast('Error', 'File size must be under 2MB', 'error');
+
+        const processFile = (base64) => {
+            const allDocs = Storage.get(STORAGE_KEYS.TEACHER_DOCUMENTS);
+            let docIndex = allDocs.findIndex(d => d.teacherId === teacherId);
+
+            if (docIndex === -1) {
+                allDocs.push({ teacherId, [docType]: base64, updatedAt: new Date().toISOString() });
+            } else {
+                allDocs[docIndex][docType] = base64;
+                allDocs[docIndex].updatedAt = new Date().toISOString();
+            }
+
+            Storage.save(STORAGE_KEYS.TEACHER_DOCUMENTS, allDocs);
+            NotificationSystem.showToast('Success', 'Document uploaded successfully!', 'success');
+            this.manageTeacherDocuments(teacherId); // Refresh modal
+        };
+
+        if (file.type.startsWith('image/')) {
+            Storage.resizeImage(file, 800, 800, (resizedBase64) => {
+                processFile(resizedBase64);
+            });
+        } else {
+            const reader = new FileReader();
+            reader.onload = (e) => processFile(e.target.result);
+            reader.readAsDataURL(file);
+        }
+    },
+
+    manageTeacherAttendance(containerId) {
+        const today = new Date().toISOString().split('T')[0];
+        const container = document.getElementById(containerId);
+
+        container.innerHTML = `
+            <div class="top-bar" style="border: none; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2 style="margin: 0;">Teacher Attendance</h2>
+                    <p style="color: var(--gray-600); margin: 5px 0 0 0;">Mark daily attendance for staff members.</p>
+                </div>
+                <button class="btn" onclick="AdminModule.manageTeachers(document.getElementById('${containerId}'))" style="border: 1px solid var(--gray-300);">
+                    <i class="fas fa-arrow-left"></i> Back to List
+                </button>
+            </div>
+
+            <div class="glass-panel" style="padding: 1.5rem;">
+                <div style="display: flex; gap: 1rem; align-items: flex-end; margin-bottom: 2rem; background: var(--gray-50); padding: 1.5rem; border-radius: 8px;">
+                    <div class="form-group" style="flex: 1; max-width: 300px;">
+                        <label class="form-label">Select Date</label>
+                        <input type="date" id="t-attn-date" class="form-control" value="${today}" max="${today}">
+                    </div>
+                    <button class="btn btn-primary" onclick="AdminModule.loadTeacherAttendanceList()">
+                        <i class="fas fa-search"></i> Load Records
+                    </button>
+                </div>
+
+                <div id="teacher-attn-list"></div>
+            </div>
+        `;
+
+        // Load default for today
+        this.loadTeacherAttendanceList();
+    },
+
+    loadTeacherAttendanceList() {
+        const date = document.getElementById('t-attn-date').value;
+        const container = document.getElementById('teacher-attn-list');
+        const teachers = Storage.get(STORAGE_KEYS.TEACHERS);
+
+        // Find existing records
+        const attendanceRecords = Storage.get(STORAGE_KEYS.TEACHER_ATTENDANCE);
+        const record = attendanceRecords.find(a => a.date === date) || { data: {} };
+        const data = record.data;
+
+        if (teachers.length === 0) {
+            container.innerHTML = `<div style="text-align: center; color: var(--gray-500);">No teachers found in the system.</div>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="table-responsive">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="background: var(--gray-50);">
+                        <tr>
+                            <th style="padding: 1rem; text-align: left;">Teacher Name</th>
+                            <th style="padding: 1rem; text-align: left;">Department</th>
+                            <th style="padding: 1rem; text-align: center;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${teachers.map(t => {
+            const status = data[t.id] || 'present';
+            return `
+                                <tr style="border-bottom: 1px solid var(--gray-100);">
+                                    <td style="padding: 1rem; font-weight: 500;">${t.name}</td>
+                                    <td style="padding: 1rem;">${t.subject || 'N/A'}</td>
+                                    <td style="padding: 1rem; text-align: center;">
+                                        <div style="display: inline-flex; background: var(--gray-100); padding: 4px; border-radius: 8px;">
+                                            <label style="cursor: pointer; padding: 6px 12px; border-radius: 6px; background: ${status === 'present' ? 'var(--success)' : 'transparent'}; color: ${status === 'present' ? 'white' : 'var(--gray-600)'}; transition: all 0.2s;" onclick="AdminModule.toggleTeacherStatus(this, 'present')">
+                                                Present
+                                                <input type="radio" name="ta_${t.id}" value="present" ${status === 'present' ? 'checked' : ''} style="display: none;">
+                                            </label>
+                                            <label style="cursor: pointer; padding: 6px 12px; border-radius: 6px; background: ${status === 'absent' ? 'var(--danger)' : 'transparent'}; color: ${status === 'absent' ? 'white' : 'var(--gray-600)'}; transition: all 0.2s;" onclick="AdminModule.toggleTeacherStatus(this, 'absent')">
+                                                Absent
+                                                <input type="radio" name="ta_${t.id}" value="absent" ${status === 'absent' ? 'checked' : ''} style="display: none;">
+                                            </label>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top: 2rem; text-align: right;">
+                <button class="btn btn-primary" onclick="AdminModule.saveTeacherAttendance()" style="padding: 12px 30px;">
+                    <i class="fas fa-save"></i> Save Attendance
+                </button>
+            </div>
+        `;
+    },
+
+    toggleTeacherStatus(label, status) {
+        label.parentNode.querySelectorAll('label').forEach(l => {
+            l.style.background = 'transparent';
+            l.style.color = 'var(--gray-600)';
+        });
+        label.style.background = status === 'present' ? 'var(--success)' : 'var(--danger)';
+        label.style.color = 'white';
+        label.querySelector('input').click();
+    },
+
+    saveTeacherAttendance() {
+        const date = document.getElementById('t-attn-date').value;
+        const teachers = Storage.get(STORAGE_KEYS.TEACHERS);
+        const data = {};
+
+        teachers.forEach(t => {
+            const status = document.querySelector(`input[name="ta_${t.id}"]:checked`).value;
+            data[t.id] = status;
+        });
+
+        const allRecords = Storage.get(STORAGE_KEYS.TEACHER_ATTENDANCE);
+        const filtered = allRecords.filter(a => a.date !== date);
+
+        filtered.push({
+            id: Date.now().toString(),
+            date,
+            data,
+            timestamp: new Date().toISOString()
+        });
+
+        Storage.save(STORAGE_KEYS.TEACHER_ATTENDANCE, filtered);
+        NotificationSystem.showToast('Success', 'Teacher attendance saved successfully!', 'success');
     },
 
     showTeacherForm(teacherId = null) {
@@ -2310,6 +2523,7 @@ const AdminModule = {
                             <th style="padding: 12px; text-align: left;">Amount Paid</th>
                             <th style="padding: 12px; text-align: left;">Date</th>
                             <th style="padding: 12px; text-align: left;">Method</th>
+                            <th style="padding: 12px; text-align: center;">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2324,9 +2538,14 @@ const AdminModule = {
                                     <td style="padding: 12px; font-weight: 700; color: var(--success);">₹${p.amount}</td>
                                     <td style="padding: 12px;">${new Date(p.date).toLocaleDateString()}</td>
                                     <td style="padding: 12px;"><span class="badge" style="background: var(--gray-50); color: var(--gray-600);">${p.method}</span></td>
+                                    <td style="padding: 12px; text-align: center;">
+                                        <button class="btn" style="color: var(--primary); padding: 5px 10px;" onclick="AdminModule.downloadReceipt('${p.id}')">
+                                            <i class="fas fa-file-invoice"></i> Receipt
+                                        </button>
+                                    </td>
                                 </tr>
                             `;
-            }).join('') || '<tr><td colspan="6" style="padding: 3rem; text-align: center; color: var(--gray-400);">No payment records found.</td></tr>'}
+            }).join('') || '<tr><td colspan="7" style="padding: 3rem; text-align: center; color: var(--gray-400);">No payment records found.</td></tr>'}
                     </tbody>
                 </table>
             `;
@@ -2377,7 +2596,121 @@ const AdminModule = {
         }
     },
 
-    // Notification Management
+    downloadReceipt(receiptId) {
+        const payments = Storage.get(STORAGE_KEYS.FEES);
+        const p = payments.find(pay => pay.id === receiptId);
+        if (!p) return NotificationSystem.showToast('Error', 'Receipt not found.', 'error');
+
+        const students = Storage.get(STORAGE_KEYS.STUDENTS);
+        const student = students.find(s => s.id === p.studentId) || { name: 'Unknown', admissionNo: 'N/A', className: 'N/A', section: '' };
+
+        const schoolName = "SCHOOL MANAGEMENT SYSTEM";
+        const schoolAddress = "123 Education Lane, Knowledge City, State - 400001";
+
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Fee Receipt - ${p.id}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; padding: 40px; background: #f4f4f4; }
+                    .receipt-container { max-width: 700px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+                    .header { text-align: center; margin-bottom: 2rem; border-bottom: 2px solid #eee; padding-bottom: 2rem; }
+                    .header h1 { margin: 0; color: #2563eb; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
+                    .header p { margin: 5px 0 0; font-size: 14px; color: #666; }
+                    .receipt-info { display: flex; justify-content: space-between; margin-bottom: 2rem; }
+                    .info-group h4 { margin: 0 0 5px; font-size: 12px; color: #888; text-transform: uppercase; }
+                    .info-group p { margin: 0; font-weight: 600; font-size: 16px; }
+                    .bill-to { margin-bottom: 2rem; background: #f9fafb; padding: 20px; border-radius: 6px; }
+                    .table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+                    .table th { text-align: left; padding: 12px; border-bottom: 2px solid #eee; color: #666; font-size: 13px; text-transform: uppercase; }
+                    .table td { padding: 15px 12px; border-bottom: 1px solid #eee; font-size: 15px; }
+                    .total-row td { border-top: 2px solid #2563eb; border-bottom: none; font-weight: 700; font-size: 18px; color: #2563eb; padding-top: 15px; }
+                    .footer { text-align: center; margin-top: 3rem; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+                    .stamp { position: fixed; top: 40%; right: 10%; border: 3px solid #22c55e; color: #22c55e; font-size: 30px; font-weight: 800; padding: 10px 20px; text-transform: uppercase; letter-spacing: 3px; transform: rotate(-15deg); opacity: 0.2; pointer-events: none; border-radius: 8px; }
+                    .print-btn { display: block; width: 100%; padding: 15px; background: #2563eb; color: white; border: none; font-size: 16px; font-weight: 600; cursor: pointer; border-radius: 6px; margin-top: 20px; }
+                    .print-btn:hover { background: #1d4ed8; }
+                    @media print {
+                        body { background: white; padding: 0; }
+                        .receipt-container { box-shadow: none; padding: 0; }
+                        .print-btn { display: none; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="receipt-container">
+                    <div class="stamp">PAID</div>
+                    
+                    <div class="header">
+                        <h1>${schoolName}</h1>
+                        <p>${schoolAddress}</p>
+                        <p>Tel: +91 98765 43210 | Email: office@school.edu</p>
+                    </div>
+
+                    <div class="receipt-info">
+                        <div class="info-group">
+                            <h4>Receipt No</h4>
+                            <p>#${p.id}</p>
+                        </div>
+                        <div class="info-group" style="text-align: right;">
+                            <h4>Date</h4>
+                            <p>${new Date(p.date).toLocaleDateString()} ${new Date(p.date).toLocaleTimeString()}</p>
+                        </div>
+                    </div>
+
+                    <div class="bill-to">
+                        <div class="info-group">
+                            <h4>Received From</h4>
+                            <p>${student.name}</p>
+                            <span style="font-size: 14px; color: #555;">Adm No: ${student.admissionNo} | Class: ${student.className} - ${student.section}</span>
+                        </div>
+                    </div>
+
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th style="text-align: right;">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>${p.description || 'School Fee Payment'}</td>
+                                <td style="text-align: right;">&#8377; ${p.amount.toLocaleString()}</td>
+                            </tr>
+                            <tr>
+                                <td><span style="font-size: 13px; color: #888;">Payment Method: ${p.method}</span></td>
+                                <td></td>
+                            </tr>
+                            <tr class="total-row">
+                                <td>Total Paid</td>
+                                <td style="text-align: right;">&#8377; ${p.amount.toLocaleString()}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="footer">
+                        <p>This is a computer-generated receipt and does not require a signature.</p>
+                        <p>Generated on ${new Date().toLocaleString()}</p>
+                    </div>
+
+                    <button class="print-btn" onclick="window.print()">Print Receipt</button>
+                </div>
+            </body>
+            </html>
+        `;
+
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = window.URL.createObjectURL(blob);
+        const win = window.open(url, '_blank');
+        if (!win) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.click();
+        }
+    },
     manageNotifications(container) {
         const notifications = Storage.get(STORAGE_KEYS.NOTIFICATIONS) || [];
         const teachers = Storage.get(STORAGE_KEYS.TEACHERS);
